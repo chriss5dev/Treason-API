@@ -3,18 +3,16 @@
 #include <sdktools>
 #include <treason>
 
-// "Y.M.D.Revision"
-#define TAPI_VERSION "2026.5.29.1"
-// "YYYYMMDDR"
-#define TAPI_VERSION_INT 202605291
+#define TAPI_VERSION "1.0"
+#define TAPI_VERSION_INT 010000
  
 public Plugin myinfo =
 {
 	name = "Treason API",
 	author = "chriss5",
-	description = "Creates natives, enums, and constants to simplify the process of fetching data from Klaus Veen's Treason.",
+	description = "A set of abstractions that make it significantly easier to write SourceMod plugins for Klaus Veen's Treason.",
 	version = TAPI_VERSION,
-	url = "http://www.sourcemod.net/"
+	url = "https://github.com/chriss5dev/Treason-API"
 };
 
 int PlayerResourceEntity = -1;
