@@ -1,4 +1,3 @@
-[center]
 # Treason API for SourceMod
 ## by chriss5
 https://forums.alliedmods.net/showthread.php?p=2844403
