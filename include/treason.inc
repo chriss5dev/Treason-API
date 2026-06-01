@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "2026.5.29.1"
+#define TAPI_VERSION_INCLUDE "1.0"
 
 #include <treason_textpositions>
 
@@ -51,14 +51,24 @@ enum treasonAbility
 // Assigns gadget integers to a readable format
 enum treasonGadget
 {
-	TGadget_None = 0,					TG_None = 0
+	TGadget_None = 0,					TG_None = 0,
+	TGadget_Bomb = 1,					TG_Bomb = 1,
+	TGadget_LethalTaser = 2,			TG_CarnageTaser = 2,
+	TGadget_SilencedRevolver = 3,		TG_Revolver = 3,
+	TGadget_SpikedBat = 4,				TG_SpikedBat = 4,
+	TGadget_Disguise = 5,				TG_Disguise = 5,
+	TGadget_BearTrap = 6,				TG_BearTrap = 6,
+	TGadget_Landmine = 7,				TG_Landmine = 7,
+	TGadget_PoisonDart = 8,				TG_PoisonDart = 8,
+	TGadget_SilencedPistol = 9,			TG_Pistol = 9,
+	TGadget_Scanner = 10,				TG_Scanner = 10,
+	TGadget_StunTaser = 11,				TG_Taser = 11,
+	TGadget_HealingStation = 12,		TG_HealingStation = 12
 };
 
 /* 
-Returns the current version of the TAPI plugin as a 9-digit integer.
-Format: YYYYMMDDR
-Format (Expanded for readability): [Year|Month|Day|Revision]
- */
+Returns the current version of the TAPI plugin as a 6-digit integer.
+*/
 native int TAPI_Version();
 
 /* 
