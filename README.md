@@ -11,4 +11,3 @@ An example of this is fetching a client's TTT role using a single function "GetC
 The second goal of this project is to remove the need to patch every KVT plugin in the future, replacing it with a single plugin update.
 
 This project is in a very early stage and was originally made for my own personal use, but I hope people find use in it!
-test
