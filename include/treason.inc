@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.0"
+#define TAPI_VERSION_INCLUDE "1.1"
 
 #include <treason_textpositions>
 
@@ -91,14 +91,26 @@ Returns int -1 if PlayerResourceEntity is invalid.
 native int IsClientZombie(int client);
 
 /* 
-Returns client index's Treason role  as "treasonRole" or "int"
-Returns 0 if unassigned/inconclusive/annihilation.
-Depends on client abilities.
+Returns client index's Treason role as "treasonRole" or "int".
+Returns 0 (TRole_Unassigned / TR_None) if unassigned.
+Detecting a Ghost (6) depends on the Ghost Radar ability existing on the target client index.
 
 @param client				The target client index.
 @return					The Treason role of the provided client, formatted as described above.
  */
 native any GetClientRole(int client);
+
+/* 
+Sets a client index's role.
+Returns false when a simple failure is detected.
+Returns true on success.
+May return true even if the SDKCall fails. (uncommon)
+
+@param client				The target client index.
+@param client				The desired role to set, as an integer.
+@return					Returns false boolean on detected failure.
+ */
+native any SetClientRole(int client, int role);
 
 /* 
 Returns the client index of the Detective client.
@@ -153,6 +165,25 @@ Returns false if client index is invalid.
 native any GetClientAbilities(int client, int[] abilities, int maxlength);
 
 /* 
+Resets client index's Treason abilities.
+Returns true if successful.
+Returns false if client index is invalid.
+
+@param client				The target client index.
+ */
+native any ResetClientAbilities(int client);
+
+/* 
+Adds a Treason ability to the given client index.
+Returns true if successful.
+Returns false if client index is invalid.
+
+@param client				The target client index.
+@param ability				The desired ability id as an int.
+ */
+native any AddClientAbility(int client, int ability);
+
+/* 
 Returns client index's Treason gadget from a specific slot (starting from 0)  as "treasonGadget" or "int"
 Returns integer 0 if client index is invalid.
 
@@ -172,6 +203,25 @@ Returns false if client index is invalid.
 @param maxlength			The maximum length of the output array. (Your array should ideally always be size 2)
  */
 native any GetClientGadgets(int client, int[] gadgets, int maxlength);
+
+/* 
+Resets client index's Treason gadgets.
+Returns true if successful.
+Returns false if client index is invalid.
+
+@param client				The target client index.
+ */
+native any ResetClientGadgets(int client);
+
+/* 
+Adds a Treason gadget to the given client index.
+Returns true if successful.
+Returns false if client index is invalid.
+
+@param client				The target client index.
+@param ability				The desired gadget id as an int.
+ */
+native any AddClientGadget(int client, int gadget);
 
 /* 
 Gets the "iscarnage" boolean of "round_start", without having to hook the event and store it manually.
