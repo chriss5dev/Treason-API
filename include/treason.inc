@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.1"
+#define TAPI_VERSION_INCLUDE "1.2"
 
 #include <treason_textpositions>
 
@@ -15,16 +15,17 @@ enum treasonRole
 	TRole_Detective = 3,	TR_Detective = 3,
 	TRole_Doctor = 4,		TR_Doctor = 4,
 	TRole_Annihilator = 5, 	TR_Annihilator = 5,
-	TRole_Ghost = 6, 		TR_Ghost = 6
+	TRole_Ghost = 6, 		TR_Ghost = 6,
+	TRole_Independent = 7,	TR_Solo = 7
 };
 
 // Assigns class integers to a readable format
 enum treasonClass
 {
-	TClass_Inconclusive = 0,	TC_None = 0,
-	TClass_Light = 1,			TC_Light = 1,
-	TClass_Medium = 2,			TC_Med = 2,
-	TClass_Heavy = 3,			TC_Heavy = 3
+	TClass_Invalid = -1,		TC_None = -1,
+	TClass_Light = 0,			TC_Light = 0,
+	TClass_Medium = 1,			TC_Med = 1,
+	TClass_Heavy = 2,			TC_Heavy = 2
 };
 
 // Assigns ability integers to a readable format
@@ -66,6 +67,49 @@ enum treasonGadget
 	TGadget_HealingStation = 12,		TG_HealingStation = 12
 };
 
+// Assigns PlayerState integers to a readable format
+enum treasonPlayerState
+{
+	TPlayerState_Default = 0,				TS_Default = 0,
+	TPlayerState_Unknown1 = 1,				TS_Unknown1 = 1,
+	TPlayerState_Spectator = 2,				TS_Spectator = 2,
+	TPlayerState_FreezeCam = 3,				TS_FreezeCam = 3,
+	TPlayerState_Unknown2 = 4,				TS_Unknown2 = 4,
+	TPlayerState_Injured = 5,				TS_Injured = 5,
+	TPlayerState_Ghost = 6,					TS_Ghost = 6,
+	TPlayerState_Unknown3 = 7,				TS_Unknown3 = 7,
+	TPlayerState_Unknown4 = 8,				TS_Unknown4 = 8,
+	TPlayerState_UIFrozen = 9,				TS_UIFrozen = 9
+};
+
+// enum struct
+enum struct CustomRole
+{
+	//indentification
+	char id[32];
+	char displayName[32];
+	
+	//customrole handler data
+	treasonRole underlyingRole;
+	int prevalence;
+	int weight;
+	
+	//assets and customization
+	bool displayAboveText;
+	int roleColor[3];
+	char playerModel[PLATFORM_MAX_PATH];
+	//char poleModel[PLATFORM_MAX_PATH];
+	
+	//doohickeys
+	bool discardRoleAbilities;
+	bool discardRoleGadgets; //add to reg
+	bool keepClassAbility;
+	treasonAbility abilities[3];
+	treasonGadget gadgets[2];
+}
+
+// TAPI natives
+
 /* 
 Returns the current version of the TAPI plugin as a 6-digit integer.
 */
@@ -77,8 +121,28 @@ Returns -1 if PlayerResourceEntity is invalid.
 
 @param client				The target client index.
 @return					The Karma value of the provided client, taken from the netprop supplying the scoreboard.
- */
+*/
+native int GetClientScoreboardKarma(int client);
+
+/* 
+Returns the realtime karma value of a client index as an integer.
+Returns -1 if client index is invalid.
+
+@param client				The target client index.
+@return					The Karma value of the provided client, taken from the server memory.
+*/
 native int GetClientKarma(int client);
+
+/* 
+Sets a client index's realtime karma value.
+Returns false if client index is invalid.
+Returns true on success.
+
+@param client				The target client index.
+@param karma				The desired karma to set, as an integer.
+@return					Returns false boolean if client index is invalid.
+*/
+native any SetClientKarma(int client, int karma);
 
 /* 
 Returns int 1 if client index is a zombie.
@@ -87,17 +151,88 @@ Returns int -1 if PlayerResourceEntity is invalid.
 
 @param client				The target client index.
 @return					The Zombie state of the provided client, formatted as described above.
- */
+*/
 native int IsClientZombie(int client);
+
+/* 
+Sets whether a client is a zombie.
+Only valid values are 0 and 1. (false and true)
+Returns false on failure.
+Returns true on success.
+
+@param client				The target client index.
+@param isZombie			The Zombie state of the provided client, formatted as described above.
+*/
+native int SetClientZombie(int client, int isZombie);
+
+/* 
+Returns the PseudoName of a client index as an integer.
+
+@param client				The target client index.
+@return					The PseudoName of the provided client as an integer.
+*/
+native int GetClientPseudoName(int client);
+
+/* 
+Overrides the return value of GetClientPseudoName() that the server recieves.
+This does not change the "truth" value, but instead replaces the return value of the function responsible for handling the "truthful" PseudoName.
+Note that the PseudoName integer corresponds to multiple variants, selected by the player's class.
+
+@param client				The target client index.
+@param pseudoName		The desired PseudoName integer.
+*/
+native void OverrideClientPseudoName(int client, int pseudoName);
+
+/* 
+Allows the server to set the PseudoName of this client normally.
+Disables the replacements made in OverrideClientPseudoName().
+Restores the source of "truth" to the original default logic.
+
+@param client				The target client index.
+*/
+native void RestoreClientPseudoName(int client);
+
+/* 
+Returns the PlayerState of a client index.
+Returns -1 if client index is invalid.
+
+@param client				The target client index.
+@return						The PlayerState of the provided client, formatted as described above.
+*/
+native int GetClientState(int client);
 
 /* 
 Returns client index's Treason role as "treasonRole" or "int".
 Returns 0 (TRole_Unassigned / TR_None) if unassigned.
+Values above 5 (TR_Annihilator) are not valid.
+This value does not fully dictate the current state or visible role of the player at all times.
+If you do not know what this does, use GetClientRole() instead.
+
+@param client				The target client index.
+@return					The Treason role of the provided client, formatted as described above.
+*/
+native any GetClientRoleID(int client);
+
+/* 
+Sets a client index's role id on the server.
+This does not update the player's role, this only sets the value.
+Returns false when a simple failure is detected.
+Returns true on success.
+
+@param client				The target client index.
+@param client				The desired role to set, as an integer.
+@return					Returns false boolean on detected failure.
+*/
+native any SetClientRoleID(int client, int role);
+
+/* 
+Returns client index's Treason role as "treasonRole" or "int".
+Returns 0 (TRole_Unassigned / TR_None) if unassigned or spectator.
 Detecting a Ghost (6) depends on the Ghost Radar ability existing on the target client index.
 
 @param client				The target client index.
 @return					The Treason role of the provided client, formatted as described above.
- */
+*/
 native any GetClientRole(int client);
 
 /* 
@@ -109,7 +244,7 @@ May return true even if the SDKCall fails. (uncommon)
 @param client				The target client index.
 @param client				The desired role to set, as an integer.
 @return					Returns false boolean on detected failure.
- */
+*/
 native any SetClientRole(int client, int role);
 
 /* 
@@ -119,7 +254,7 @@ Returns 0 if no detective can be found.
 Depends on GetClientRole().
 
 @return					The index of the round's Detective if one can be found. 0 if none can be found.
- */
+*/
 native int GetDetectiveIndex();
 
 /* 
@@ -129,18 +264,16 @@ Returns 0 if no doctor can be found.
 Depends on GetClientRole().
 
 @return					The index of the round's Doctor if one can be found. 0 if none can be found.
- */
+*/
 native int GetDoctorIndex();
 
 /* 
 Returns client index's Treason class as "treasonClass" or "int"
-Returns 0 if unassigned/inconclusive.
-Return is meaningless if annihilation.
-Depends on client abilities.
+Returns -1 if unassigned/inconclusive.
 
 @param client				The target client index.
 @return					The Treason class of the provided client, formatted as described above.
- */
+*/
 native any GetClientClass(int client);
 
 /* 
@@ -149,7 +282,7 @@ Returns integer 0 if client index is invalid.
 
 @param client				The target client index.
 @param slot				The ability slot to return the value of, starting from 0, max 2. (3 available slots)
- */
+*/
 native any GetClientAbility(int client, int slot);
 
 /* 
@@ -161,7 +294,7 @@ Returns false if client index is invalid.
 @param client				The target client index.
 @param abilities			An int[] to copy the output of this function to. (Total 3 slots)
 @param maxlength			The maximum length of the output array. (Your array should ideally always be size 3)
- */
+*/
 native any GetClientAbilities(int client, int[] abilities, int maxlength);
 
 /* 
@@ -170,7 +303,7 @@ Returns true if successful.
 Returns false if client index is invalid.
 
 @param client				The target client index.
- */
+*/
 native any ResetClientAbilities(int client);
 
 /* 
@@ -180,7 +313,7 @@ Returns false if client index is invalid.
 
 @param client				The target client index.
 @param ability				The desired ability id as an int.
- */
+*/
 native any AddClientAbility(int client, int ability);
 
 /* 
@@ -189,7 +322,7 @@ Returns integer 0 if client index is invalid.
 
 @param client				The target client index.
 @param slot				The gadget slot to return the value of, starting from 0, max 2. (2 available slots)
- */
+*/
 native any GetClientGadget(int client, int slot);
 
 /* 
@@ -201,7 +334,7 @@ Returns false if client index is invalid.
 @param client				The target client index.
 @param gadgets			An int[] to copy the output of this function to. (Total 2 slots)
 @param maxlength			The maximum length of the output array. (Your array should ideally always be size 2)
- */
+*/
 native any GetClientGadgets(int client, int[] gadgets, int maxlength);
 
 /* 
@@ -210,7 +343,7 @@ Returns true if successful.
 Returns false if client index is invalid.
 
 @param client				The target client index.
- */
+*/
 native any ResetClientGadgets(int client);
 
 /* 
@@ -220,7 +353,7 @@ Returns false if client index is invalid.
 
 @param client				The target client index.
 @param ability				The desired gadget id as an int.
- */
+*/
 native any AddClientGadget(int client, int gadget);
 
 /* 
@@ -230,5 +363,17 @@ Returns false if it is not.
 
 @param includePreRound		If true, this function will also return true during the pre-round state, before the Annihilator role is displayed. ("Preparing...")
 @return					Returns the current state of Annihilation, as described above.
- */
+*/
 native any GetIsCarnage(bool includePreRound);
+
+// TAPI Custom Role natives
+
+/* 
+Gets the CustomRoleIndex of the given client index.
+Returns -1 if client index is invalid.
+Returns 0 if the client is not assigned a custom role.
+
+@param client				The target client index.
+@return						The CustomRoleIndex of the target client.
+*/
+native int GetClientCustomRole(int client);

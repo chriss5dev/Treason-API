@@ -8,6 +8,14 @@
 			{
 				"windows"	"0x11EC"
 			}
+			"PlayerIsZombie"
+			{
+				"windows"	"0x12A8‬"
+			}
+			"PlayerKarma"
+			{
+				"windows"	"0x12B0‬"
+			}
 		}
 		
 		"Signatures"
@@ -37,6 +45,44 @@
                 "library"	"server"
                 "windows"	"\x55\x8B\xEC\x51\x53\x8B\xD9\x56\x57\x8B\x8B\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xC7\x45\xFC\x00\x00\x00\x00\x33\xF6\x0F\x1F\x00\x8D\xBB\x2A\x2A\x2A\x2A\x03\xFE\x8D\x4D\xFC\x8B\x07\x3B\x01\x2A\x2A\x57\x8B\xCB\xE8\x2A\x2A\x2A\x2A\xC7\x07\x00\x00\x00\x00\x83\xC6\x04\x83\xFE\x08"
             }
+			"PlayerDisguiseActivated"
+            {
+                "library"	"server"
+                "windows"	"\x0F\xB6\x03\x8D\x4D\xFF\xC6\x45\xFF\x01\x3A\x01\x75\x04\x33\xC0\xEB\x05\x1B\xC0\x2A\x83\xC8\x01"
+            }
+			"PlayerDisguiseDeactivated"
+            {
+                "library"	"server"
+                "windows"	"\x55\x8B\xEC\x83\xEC\x24\x56\x57\x8B\xF9\x8D\x4D\xDC\x8B\x77\x04\xE8\x2A\x2A\x2A\x2A\x56\x8D\x4D\xDC"
+            }
+			"PseudoNameWrite"
+            {
+                "library" 	"server"
+                "windows"	"\x89\x84\x9E\x70\x08\x00\x00\x8D\x8B\x3E\x02\x00\x00\x8B\x04\x8E\x8D\x0C\x8E\x3B\x87\xD0\x11\x00\x00"
+            }
+			"GetClientPseudoName"
+            {
+                "library" "server"
+                "windows" "\x55\x8B\xEC\x8B\x55\x08\x33\xC0\x81\xC1\xBC\x05\x00\x00\x66\x90"
+            }
+		}
+		
+		"Functions"
+		{
+			"GetClientPseudoName"
+			{
+				"signature" "GetClientPseudoName"
+				"callconv" "thiscall"
+				"return" "int"
+				"this" "address"
+				"arguments"
+				{
+					"client"
+					{
+						"type" "int"
+					}
+				}
+			}
 		}
 	}
 }
