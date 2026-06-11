@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.2"
+#define TAPI_VERSION_INCLUDE "1.2.1"
 
 #include <treason_textpositions>
 

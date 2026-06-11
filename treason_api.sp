@@ -5,8 +5,8 @@
 #include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.2"
-#define TAPI_VERSION_INT 010200
+#define TAPI_VERSION "1.2.1"
+#define TAPI_VERSION_INT 010201
  
 public Plugin myinfo =
 {
