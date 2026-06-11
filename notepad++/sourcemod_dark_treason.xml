@@ -172,7 +172,7 @@ int
 void 
 
 
-treasonRole treasonClass treasonAbility treasonGadget</Keywords>
+treasonRole treasonClass treasonAbility treasonGadget treasonPlayerState CustomRole</Keywords>
             <Keywords name="Keywords4">ADMFLAG_BAN 
 ADMFLAG_CHANGEMAP 
 ADMFLAG_CHAT 
@@ -2772,13 +2772,31 @@ AddChangeHook .IntValue GetBounds GetDefault GetDescription GetName GetString Re
 
 
 
-TAPI_Version GetClientKarma IsClientZombie GetClientRole GetClientClass GetClientAbility GetClientAbilities GetDetectiveIndex GetDoctorIndex GetClientGadget GetClientGadgets GetIsCarnage</Keywords>
+TAPI_Version GetClientKarma IsClientZombie GetClientRole GetClientClass GetClientAbility GetClientAbilities GetDetectiveIndex GetDoctorIndex GetClientGadget GetClientGadgets GetIsCarnage
+GetClientScoreboardKarma
+SetClientKarma
+SetClientZombie
+GetClientPseudoName
+OverrideClientPseudoName
+RestoreClientPseudoName
+GetClientState
+GetClientRoleID
+SetClientRoleID
+SetClientRole
+ResetClientAbilities
+AddClientAbility
+ResetClientGadgets
+AddClientGadget
+GetClientCustomRole
+</Keywords>
             <Keywords name="Keywords6">TRole_Unassigned TR_None
  TRole_Innocent  TR_Innocent
  TRole_Traitor  TR_Traitor
  TRole_Detective TR_Detective
  TRole_Doctor TR_Doctor TRole_Annihilator TR_Annihilator TRole_Ghost TR_Ghost
-TClass_Inconclusive TC_None
+ TRole_Independent
+ TRole_Solo
+TClass_Invalid TC_None
  TClass_Light   TC_Light
  TClass_Medium   TC_Med
  TClass_Heavy   TC_Heavy
@@ -2796,7 +2814,23 @@ TAbility_None     TA_None
  TAbility_RangeAdrenaline  TA_RangeAdrenaline
  TAbility_DoctorResuscitate TA_DoctorRes
  TAbility_BodyRadar   TA_BodyRadar TAbility_GhostTransform TAbility_GhostRadar TA_Ghost TA_GhostRadar
-TGadget_None TG_None TGadget_Bomb TGadget_LethalTaser TGadget_SilencedRevolver TGadget_SpikedBat TGadget_Disguise TGadget_BearTrap TGadget_Landmine TGadget_PoisonDart TGadget_SilencedPistol TGadget_Scanner TGadget_StunTaser TGadget_HealingStation TG_Bomb TG_CarnageTaser TG_Revolver TG_SpikedBat TG_Disguise TG_BearTrap TG_Landmine TG_PoisonDart TG_Pistol TG_Scanner TG_Taser TG_HealingStation</Keywords>
+TGadget_None TG_None TGadget_Bomb TGadget_LethalTaser TGadget_SilencedRevolver TGadget_SpikedBat TGadget_Disguise TGadget_BearTrap TGadget_Landmine TGadget_PoisonDart TGadget_SilencedPistol TGadget_Scanner TGadget_StunTaser TGadget_HealingStation TG_Bomb TG_CarnageTaser TG_Revolver TG_SpikedBat TG_Disguise TG_BearTrap TG_Landmine TG_PoisonDart TG_Pistol TG_Scanner TG_Taser TG_HealingStation
+TPlayerState_Default
+TS_Default
+TPlayerState_Spectator
+TS_Spectator
+TPlayerState_FreezeCam
+TS_FreezeCam
+TPlayerState_Injured
+TS_Injured
+TPlayerState_Ghost
+TS_Ghost
+
+
+
+
+
+</Keywords>
             <Keywords name="Keywords7">E_
 
 Cmd_
