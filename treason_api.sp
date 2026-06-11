@@ -556,11 +556,11 @@ public any N_SetClientZombie(Handle plugin, int numParams)
 	// Get modelUpdate (parameter 3)
 	int role = GetNativeCell(3);
 	
-	if(state == 1 || state == 0)
+	if(!IsClientInGame(client))
+	{return false;}
+	
+	if(state == 1)
 	{
-		if(!IsClientInGame(client))
-		{return false;}
-		
 		SetEntData(client, g_ZombieOffset, state);
 		
 		if(role == 2)
@@ -585,6 +585,11 @@ public any N_SetClientZombie(Handle plugin, int numParams)
 				}
 			}
 		}
+		return true;
+	}
+	else if(state == 0)
+	{
+		SetEntData(client, g_ZombieOffset, state);
 		return true;
 	}
 	return false;
