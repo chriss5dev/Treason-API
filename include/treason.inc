@@ -94,6 +94,10 @@ enum struct CustomRole
 	int prevalence;
 	int weight;
 	
+	//stats
+	bool setHealth;
+	int health;
+	
 	//assets and customization
 	bool displayAboveText;
 	int roleColor[3];
@@ -156,14 +160,18 @@ native int IsClientZombie(int client);
 
 /* 
 Sets whether a client is a zombie.
-Only valid values are 0 and 1. (false and true)
+Only valid state values are 0 and 1. (false and true)
+Role value 0 will assign the role based on the current role.
+Role value 1 will assign the client as a zombie innocent.
+Role value 2 will assign the client as a zombie innocent.
 Returns false on failure.
 Returns true on success.
 
 @param client				The target client index.
 @param isZombie			The Zombie state of the provided client, formatted as described above.
+@param role				The desired role to assign, formatted as described above.
 */
-native int SetClientZombie(int client, int isZombie);
+native any SetClientZombie(int client, int isZombie, int role);
 
 /* 
 Returns the PseudoName of a client index as an integer.

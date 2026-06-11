@@ -202,6 +202,10 @@ public void RegisterCommands()
 	RegAdminCmd("tapi_getgadget", Cmd_GetGadget, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_getroleid", Cmd_GetRoleID, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_getrole", Cmd_GetRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_getzombie", Cmd_GetZombie, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_setzombie", Cmd_SetZombie, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_getkarma", Cmd_GetKarma, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_setkarma", Cmd_SetKarma, ADMFLAG_ROOT);
 /* 	//set
 	RegAdminCmd("tapi_addability", Cmd_GetRole, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_addgadget", Cmd_GetRole, ADMFLAG_ROOT);
@@ -386,6 +390,101 @@ public Action Cmd_GetRole(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Cmd_GetZombie(int client, int args)
+{
+	if(args == 0)
+	{
+		int state;
+		
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			state = IsClientZombie(client);
+			PrintToConsole(client, "Client has zombie state %d.", state);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_getzombie");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_SetZombie(int client, int args)
+{
+	int role = 0;
+	if(args == 2)
+	{
+		role = GetCmdArgInt(2);
+	}
+	if(args >= 1)
+	{
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			int state = GetCmdArgInt(1);
+			SetClientZombie(client, state, role);
+			PrintToConsole(client, "Client zombie state set to %d.", state);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_setzombie <state> <optionalRole>");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_GetKarma(int client, int args)
+{
+	if(args == 0)
+	{
+		int karma;
+		
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			karma = GetClientKarma(client);
+			PrintToConsole(client, "Client has %d karma.", karma);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_getkarma");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_SetKarma(int client, int args)
+{
+	if(args == 1)
+	{
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			int karma = GetCmdArgInt(1);
+			SetEntData(client, g_KarmaOffset, karma);
+			PrintToConsole(client, "Client karma set to %d.", karma);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_setkarma <karma>");
+	}
+	return Plugin_Handled;
+}
+
 // NATIVES
 public int N_TAPI_Version(Handle plugin, int numParams)
 {
@@ -454,10 +553,38 @@ public any N_SetClientZombie(Handle plugin, int numParams)
 	int client = GetNativeCell(1);
 	// Get state (parameter 2)
 	int state = GetNativeCell(2);
+	// Get modelUpdate (parameter 3)
+	int role = GetNativeCell(3);
 	
-	if(state == 1 && state == 0 && IsClientInGame(client))
+	if(state == 1 || state == 0)
 	{
+		if(!IsClientInGame(client))
+		{return false;}
+		
 		SetEntData(client, g_ZombieOffset, state);
+		
+		if(role == 2)
+		{
+			SetClientRole(client, TR_Traitor);
+		}
+		else if(role == 1)
+		{
+			SetClientRole(client, TR_Innocent);
+		}
+		else
+		{
+			switch(GetClientRole(client))
+			{
+				case TR_Innocent, TR_Detective, TR_Doctor:
+				{
+					SetClientRole(client, TR_Innocent);
+				}
+				case TR_Traitor: 
+				{
+					SetClientRole(client, TR_Traitor);
+				}
+			}
+		}
 		return true;
 	}
 	return false;
@@ -583,7 +710,7 @@ public any N_SetClientRole(Handle plugin, int numParams)
 	{
 		SetEntData(client, g_RoleOffset, role);
 		SDKCall(g_hUpdateRole, client, 0);
-		SetEntityModel(client, "models/player/mafia_don.mdl");
+		if(role == 5) {SetEntityModel(client, "models/player/mafia_don.mdl");}
 		return true;
 	}
 	return false;
