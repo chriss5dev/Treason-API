@@ -1,3 +1,4 @@
 *.exe
 compile.dat
 api_thread.txt
+/package
