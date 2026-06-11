@@ -1,10 +1,12 @@
 #pragma semicolon 1
 #include <sourcemod>
 #include <sdktools>
+#include <sdkhooks>
+#include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.0"
-#define TAPI_VERSION_INT 010000
+#define TAPI_VERSION "1.2"
+#define TAPI_VERSION_INT 010200
  
 public Plugin myinfo =
 {
@@ -15,11 +17,25 @@ public Plugin myinfo =
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
+//global data containers
 int PlayerResourceEntity = -1;
 int g_DetectiveIndex = -1;
 int g_DoctorIndex = -1;
 bool g_IsCarnage = false;
 bool g_IsCarnagePreRound = false;
+bool g_HasPseudoOverride[MAXPLAYERS + 1];
+int g_PseudoOverride[MAXPLAYERS + 1];
+
+//gamedata stuffs
+Handle g_hUpdateRole = INVALID_HANDLE;
+Handle g_hSetAbility = INVALID_HANDLE;
+Handle g_hResetAbility = INVALID_HANDLE;
+Handle g_hSetGadget = INVALID_HANDLE;
+Handle g_hResetGadget = INVALID_HANDLE;
+Handle g_hGetClientPseudoName = INVALID_HANDLE;
+int g_KarmaOffset = -1;
+int g_ZombieOffset = -1;
+int g_RoleOffset = -1;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -30,6 +46,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
+	SDKSetup();
 	HookEvents();
 	RegisterCommands();
 	PrintToServer("[TAPI] Treason API Loaded! Version %s", TAPI_VERSION);
@@ -40,29 +57,162 @@ public void OnMapStart()
     PlayerResourceEntity = GetPlayerResourceEntity();
 }
 
+public void OnClientConnected(int client)
+{
+    g_HasPseudoOverride[client] = false;
+}
+
+public void OnClientDisconnect(int client)
+{
+	g_HasPseudoOverride[client] = false;
+}
+
+public void SDKSetup()
+{
+    Handle hGameConf = LoadGameConfigFile("game.treason");
+    if (hGameConf == null)
+    {
+        SetFailState("Failed to load gamedata file 'game.treason.txt'");
+    }
+
+	g_KarmaOffset = GameConfGetOffset(hGameConf, "PlayerKarma");
+    if (g_KarmaOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerKarma' offset in gamedata");
+    }
+
+	g_ZombieOffset = GameConfGetOffset(hGameConf, "PlayerIsZombie");
+    if (g_ZombieOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerIsZombie' offset in gamedata");
+    }
+
+    g_RoleOffset = GameConfGetOffset(hGameConf, "PlayerRole");
+    if (g_RoleOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerRole' offset in gamedata");
+    }
+
+    StartPrepSDKCall(SDKCall_Player);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "PlayerUpdateRole"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'PlayerUpdateRole' signature");
+    }
+    PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+    g_hUpdateRole = EndPrepSDKCall();
+	
+	StartPrepSDKCall(SDKCall_Player);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "PlayerAddAbility"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'PlayerAddAbility' signature");
+    }
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain); 
+	g_hSetAbility = EndPrepSDKCall();
+	
+	StartPrepSDKCall(SDKCall_Player);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "PlayerResetAbilities"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'PlayerResetAbilities' signature");
+    }
+	g_hResetAbility = EndPrepSDKCall();
+	
+	StartPrepSDKCall(SDKCall_Player);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "PlayerAddGadget"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'PlayerAddGadget' signature");
+    }
+	PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain); 
+	g_hSetGadget = EndPrepSDKCall();
+	
+	StartPrepSDKCall(SDKCall_Player);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "PlayerResetGadgets"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'PlayerResetGadgets' signature");
+    }
+	g_hResetGadget = EndPrepSDKCall();
+	
+	g_hGetClientPseudoName = DHookCreateFromConf(hGameConf, "GetClientPseudoName");
+	if (g_hGetClientPseudoName == null)
+	{SetFailState("Failed to create detour GetClientPseudoName");}
+
+    if (!DHookEnableDetour(g_hGetClientPseudoName, false, DetourGetClientPseudoName))
+	{SetFailState("Failed to enable detour GetClientPseudoName");}
+	
+    delete hGameConf;
+
+    if (g_hUpdateRole == null || g_hSetAbility == null || g_hResetAbility == null || g_hSetGadget == null|| g_hResetGadget == null)
+    {
+        SetFailState("Failed to create SDKCalls");
+    }
+}
+
 public void CreateNatives()
 {
+	//tapi
 	CreateNative("TAPI_Version", N_TAPI_Version);
+	//client data
+	CreateNative("GetClientScoreboardKarma", N_GetClientScoreboardKarma);
 	CreateNative("GetClientKarma", N_GetClientKarma);
+	CreateNative("SetClientKarma", N_SetClientKarma);
 	CreateNative("IsClientZombie", N_IsClientZombie);
+	CreateNative("SetClientZombie", N_SetClientZombie);
+	CreateNative("GetClientPseudoName", N_GetClientPseudoName);
+	CreateNative("OverrideClientPseudoName", N_OverrideClientPseudoName);
+	CreateNative("RestoreClientPseudoName", N_RestoreClientPseudoName);
+	CreateNative("GetClientState", N_GetClientState);
+	//roles
+	CreateNative("GetClientRoleID", N_GetClientRoleID);
+	CreateNative("SetClientRoleID", N_SetClientRoleID);
 	CreateNative("GetClientRole", N_GetClientRole);
+	CreateNative("SetClientRole", N_SetClientRole);
+	//special innocents
 	CreateNative("GetDetectiveIndex", N_GetDetectiveIndex);
 	CreateNative("GetDoctorIndex", N_GetDoctorIndex);
+	//class
 	CreateNative("GetClientClass", N_GetClientClass);
+	//abilities
 	CreateNative("GetClientAbility", N_GetClientAbility);
 	CreateNative("GetClientAbilities", N_GetClientAbilities);
+	CreateNative("AddClientAbility", N_AddClientAbility);
+	CreateNative("ResetClientAbilities", N_ResetClientAbilities);
+	//gadgets
 	CreateNative("GetClientGadget", N_GetClientGadget);
 	CreateNative("GetClientGadgets", N_GetClientGadgets);
+	CreateNative("AddClientGadget", N_AddClientGadget);
+	CreateNative("ResetClientGadgets", N_ResetClientGadgets);
+	//round data
 	CreateNative("GetIsCarnage", N_GetIsCarnage);
 }
 
 public void RegisterCommands()
 {
+	//tapi
 	RegConsoleCmd("tapi", Cmd_TAPI);
 	RegConsoleCmd("tapi_int", Cmd_TAPI_INT);
+	//get
 	RegAdminCmd("tapi_getability", Cmd_GetAbility, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_getgadget", Cmd_GetGadget, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_getroleid", Cmd_GetRoleID, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_getrole", Cmd_GetRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_getzombie", Cmd_GetZombie, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_setzombie", Cmd_SetZombie, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_getkarma", Cmd_GetKarma, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_setkarma", Cmd_SetKarma, ADMFLAG_ROOT);
+/* 	//set
+	RegAdminCmd("tapi_addability", Cmd_GetRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_addgadget", Cmd_GetRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_setrole", Cmd_GetRole, ADMFLAG_ROOT);
+	//reset or clear
+	RegAdminCmd("tapi_resetabilities", Cmd_GetRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_resetgadgets", Cmd_GetRole, ADMFLAG_ROOT); */
 }
 
 public void HookEvents()
@@ -184,6 +334,34 @@ public Action Cmd_GetGadget(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Cmd_GetRoleID(int client, int args)
+{
+	if(args == 0)
+	{
+		int role;
+		
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else if(role < 0 || role > 5)
+		{
+			role = GetClientRoleID(client);
+			PrintToConsole(client, "Client has role ID %d. This role ID is invalid.", role);
+		}
+		else
+		{
+			role = GetClientRoleID(client);
+			PrintToConsole(client, "Client has role ID %d.", role);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_getroleid");
+	}
+	return Plugin_Handled;
+}
+
 public Action Cmd_GetRole(int client, int args)
 {
 	if(args == 0)
@@ -194,20 +372,115 @@ public Action Cmd_GetRole(int client, int args)
 		{PrintToConsole(client, "Source client of this command can not be the server.");}
 		else if(!IsClientInGame(client))
 		{PrintToConsole(client, "Source client of this command instance is invalid.");}
-		else if(role < 0 || role > 6)
+		else if(role < 0 || role > 7)
 		{
 			role = GetClientRole(client);
-			PrintToConsole(client, "Client has role ID %d. This role ID is invalid.", role);
+			PrintToConsole(client, "Client has role %d. This role is invalid.", role);
 		}
 		else
 		{
 			role = GetClientRole(client);
-			PrintToConsole(client, "Client has role ID %d.", role);
+			PrintToConsole(client, "Client has role %d.", role);
 		}
 	}
 	else
 	{
 		PrintToConsole(client, "usage: tapi_getrole");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_GetZombie(int client, int args)
+{
+	if(args == 0)
+	{
+		int state;
+		
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			state = IsClientZombie(client);
+			PrintToConsole(client, "Client has zombie state %d.", state);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_getzombie");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_SetZombie(int client, int args)
+{
+	int role = 0;
+	if(args == 2)
+	{
+		role = GetCmdArgInt(2);
+	}
+	if(args >= 1)
+	{
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			int state = GetCmdArgInt(1);
+			SetClientZombie(client, state, role);
+			PrintToConsole(client, "Client zombie state set to %d.", state);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_setzombie <state> <optionalRole>");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_GetKarma(int client, int args)
+{
+	if(args == 0)
+	{
+		int karma;
+		
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			karma = GetClientKarma(client);
+			PrintToConsole(client, "Client has %d karma.", karma);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_getkarma");
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_SetKarma(int client, int args)
+{
+	if(args == 1)
+	{
+		if(client==0)
+		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		else if(!IsClientInGame(client))
+		{PrintToConsole(client, "Source client of this command instance is invalid.");}
+		else
+		{
+			int karma = GetCmdArgInt(1);
+			SetEntData(client, g_KarmaOffset, karma);
+			PrintToConsole(client, "Client karma set to %d.", karma);
+		}
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_setkarma <karma>");
 	}
 	return Plugin_Handled;
 }
@@ -218,7 +491,7 @@ public int N_TAPI_Version(Handle plugin, int numParams)
 	return TAPI_VERSION_INT;
 }
 
-public int N_GetClientKarma(Handle plugin, int numParams)
+public int N_GetClientScoreboardKarma(Handle plugin, int numParams)
 {
 	// PRE must exist
 	if(PlayerResourceEntity == -1) {return -1;}		
@@ -230,6 +503,34 @@ public int N_GetClientKarma(Handle plugin, int numParams)
 	int karma = GetEntProp(PlayerResourceEntity, Prop_Send, "m_iKarma", 4, client);
 	
 	return karma;
+}
+
+public int N_GetClientKarma(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	if(IsClientInGame(client))
+	{
+		//check server memory
+		return GetEntData(client, g_KarmaOffset, 1);
+	}
+	return -1;
+}
+
+public any N_SetClientKarma(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	// Get karma (parameter 2)
+	int karma = GetNativeCell(2);
+	
+	if(IsClientInGame(client))
+	{
+		SetEntData(client, g_KarmaOffset, karma);
+		return true;
+	}
+	return false;
 }
 
 public int N_IsClientZombie(Handle plugin, int numParams)
@@ -246,6 +547,119 @@ public int N_IsClientZombie(Handle plugin, int numParams)
 	return isZombie;
 }
 
+public any N_SetClientZombie(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	// Get state (parameter 2)
+	int state = GetNativeCell(2);
+	// Get modelUpdate (parameter 3)
+	int role = GetNativeCell(3);
+	
+	if(state == 1 || state == 0)
+	{
+		if(!IsClientInGame(client))
+		{return false;}
+		
+		SetEntData(client, g_ZombieOffset, state);
+		
+		if(role == 2)
+		{
+			SetClientRole(client, TR_Traitor);
+		}
+		else if(role == 1)
+		{
+			SetClientRole(client, TR_Innocent);
+		}
+		else
+		{
+			switch(GetClientRole(client))
+			{
+				case TR_Innocent, TR_Detective, TR_Doctor:
+				{
+					SetClientRole(client, TR_Innocent);
+				}
+				case TR_Traitor: 
+				{
+					SetClientRole(client, TR_Traitor);
+				}
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+public int N_GetClientPseudoName(Handle plugin, int numParams)
+{
+	// PRE must exist
+	if(PlayerResourceEntity == -1) {return -1;}
+	
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	// Read from netprop
+	int name = GetEntProp(PlayerResourceEntity, Prop_Send, "m_iPseudoName", 4, client);
+	
+	return name;
+}
+
+public void N_OverrideClientPseudoName(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	int name = GetNativeCell(2);
+	
+	g_PseudoOverride[client] = name;
+    g_HasPseudoOverride[client] = true;
+}
+
+public void N_RestoreClientPseudoName(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	g_HasPseudoOverride[client] = false;
+    g_PseudoOverride[client] = 0;
+}
+
+public int N_GetClientState(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	if(client > 0 && IsClientInGame(client))
+	{return GetEntProp(client, Prop_Send, "m_iPlayerState");}
+	return -1;
+}
+
+public any N_GetClientRoleID(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	if(IsClientInGame(client))
+	{
+		//check server memory
+		return GetEntData(client, g_RoleOffset, 1);
+	}
+	return -1;
+}
+
+public any N_SetClientRoleID(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	// Get role index (parameter 2)
+	int role = GetNativeCell(2);
+	
+	if(role <= 5 && role >= 0 && IsClientInGame(client))
+	{
+		SetEntData(client, g_RoleOffset, role);
+		return true;
+	}
+	return false;
+}
+
 public any N_GetClientRole(Handle plugin, int numParams)
 {
 	// Get client index (parameter 1)
@@ -253,36 +667,53 @@ public any N_GetClientRole(Handle plugin, int numParams)
 	
 	if(IsClientInGame(client))
 	{
-		// Scan client for role-exclusive abilities
-		for (int i = 0; i < 3; i++) {
+		any playerState = GetClientState(client);
+		if(playerState == TS_Ghost)
+		{return TR_Ghost;}
+		else if(playerState == TS_Spectator)
+		{return TR_None;}
+		else
+		{
+			//otherwise we good to check server memory
+			int role = GetEntData(client, g_RoleOffset, 1);
+			return role;
+		}
+		
+		/* // Scan client for Ghost Radar
+		for (int i = 0; i < 3; i++)
+		{
 			treasonAbility ability = GetClientAbility(client, i);
 			
-			if(ability == TA_GhostRadar)
+			if(ability == TAbility_GhostRadar)
 			{return TR_Ghost;}
-			else if(!g_IsCarnage)
-			{
-				switch(ability)
-				{
-					// has innocent-only abilities?
-					case TA_ClueRadar,TA_TeamRadar: return TR_Innocent;
-					
-					// has traitor-only abilities?
-					case TA_TRadar,TA_Zombie: return TR_Traitor;
-					
-					// has detective-only abilities?
-					case TA_DRadar,TA_DetectiveRes: return TR_Detective;
-					
-					// has doctor-only abilities?
-					case TA_RangeHeal,TA_RangeAdrenaline,TA_DoctorRes,TA_BodyRadar: return TR_Doctor;
-				}
-			}
-			else if(g_IsCarnage && IsPlayerAlive(client))
-			{
-				return TR_Annihilator;
-			}
 		}
+		// Scan client for Ghost Transform
+		for (int i = 0; i < 3; i++)
+		{
+			treasonAbility ability = GetClientAbility(client, i);
+			
+			if(ability == TAbility_GhostTransform)
+			{return TR_None;}
+		} */
 	}
 	return TA_None;
+}
+
+public any N_SetClientRole(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	// Get role index (parameter 2)
+	int role = GetNativeCell(2);
+	
+	if(role <= 5 && role >= 0 && IsClientInGame(client))
+	{
+		SetEntData(client, g_RoleOffset, role);
+		SDKCall(g_hUpdateRole, client, 0);
+		if(role == 5) {SetEntityModel(client, "models/player/mafia_don.mdl");}
+		return true;
+	}
+	return false;
 }
 
 public int N_GetDetectiveIndex(Handle plugin, int numParams)
@@ -331,19 +762,9 @@ public any N_GetClientClass(Handle plugin, int numParams)
 	int client = GetNativeCell(1);
 	if(IsClientInGame(client))
 	{
-		// Scan client for class-exclusive abilities
-		for (int i = 0; i < 3; i++) {
-			int ability = GetEntProp(client, Prop_Send, "m_nAbilities", 1, i);
-			
-			switch(ability)
-			{
-				case TA_Adrenaline: return TC_Light; //light
-				case TA_Medkit: return TC_Med; //medium
-				case TA_Shield: return TC_Heavy; //heavy
-			}
-		}
+		return GetEntProp(client, Prop_Send, "m_iClass");
 	}
-	return TC_None;
+	return TClass_Invalid;
 }
 
 public any N_GetClientAbility(Handle plugin, int numParams)
@@ -373,6 +794,31 @@ public any N_GetClientAbilities(Handle plugin, int numParams)
 		abilities[1] = GetEntProp(client, Prop_Send, "m_nAbilities", 1, 1);
 		abilities[2] = GetEntProp(client, Prop_Send, "m_nAbilities", 1, 2);
 		SetNativeArray(2, abilities, size);
+		return true;
+	}
+	return false;
+}
+
+public any N_ResetClientAbilities(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	if(IsClientInGame(client))
+	{
+		SDKCall(g_hResetAbility, client);
+		return true;
+	}
+	return false;
+}
+
+public any N_AddClientAbility(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	int ability = GetNativeCell(2);
+	if(IsClientInGame(client))
+	{
+		SDKCall(g_hSetAbility, client, ability);
 		return true;
 	}
 	return false;
@@ -409,6 +855,31 @@ public any N_GetClientGadgets(Handle plugin, int numParams)
 	return false;
 }
 
+public any N_ResetClientGadgets(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	if(IsClientInGame(client))
+	{
+		SDKCall(g_hResetGadget, client);
+		return true;
+	}
+	return false;
+}
+
+public any N_AddClientGadget(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	int gadget = GetNativeCell(2);
+	if(IsClientInGame(client))
+	{
+		SDKCall(g_hSetGadget, client, gadget);
+		return true;
+	}
+	return false;
+}
+
 public any N_GetIsCarnage(Handle plugin, int numParams)
 {
 	// Get "includePreRound" (parameter 1)
@@ -418,4 +889,18 @@ public any N_GetIsCarnage(Handle plugin, int numParams)
 	{return g_IsCarnagePreRound;}
 	else
 	{return g_IsCarnage;}
+}
+
+//detours
+public MRESReturn DetourGetClientPseudoName(Address pThis, DHookReturn hReturn, DHookParam hParams)
+{
+    int client = hParams.Get(1);
+
+    if (1 <= client <= MaxClients && g_HasPseudoOverride[client])
+    {
+        hReturn.Value = g_PseudoOverride[client];
+        return MRES_Supercede;
+    }
+
+    return MRES_Ignored;
 }
