@@ -5,8 +5,8 @@
 #include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.2.1"
-#define TAPI_VERSION_INT 010201
+#define TAPI_VERSION "1.2.2"
+#define TAPI_VERSION_INT 010202
  
 public Plugin myinfo =
 {
@@ -628,7 +628,7 @@ public void N_RestoreClientPseudoName(Handle plugin, int numParams)
     g_PseudoOverride[client] = 0;
 }
 
-public int N_GetClientState(Handle plugin, int numParams)
+public any N_GetClientState(Handle plugin, int numParams)
 {
 	// Get client index (parameter 1)
 	int client = GetNativeCell(1);
@@ -677,6 +677,8 @@ public any N_GetClientRole(Handle plugin, int numParams)
 		{return TR_Ghost;}
 		else if(playerState == TS_Spectator)
 		{return TR_None;}
+		else if(IsClientSoloCustomRole(client))
+		{return TR_Solo;}
 		else
 		{
 			//otherwise we good to check server memory

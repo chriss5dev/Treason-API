@@ -93,14 +93,17 @@ enum struct CustomRole
 	treasonRole underlyingRole;
 	int prevalence;
 	int weight;
-	
-	//stats
-	bool setHealth;
-	int health;
+	int minPlayers;
+	int maxPlayers;
+	int minTraitors;
+	int minInnocents;
+	bool requireDetective;
+	bool requireDoctor;
 	
 	//assets and customization
 	bool displayAboveText;
 	int roleColor[3];
+	int roleTextBrightness;
 	char playerModel[PLATFORM_MAX_PATH];
 	//char poleModel[PLATFORM_MAX_PATH];
 	
@@ -207,7 +210,7 @@ Returns -1 if client index is invalid.
 @param client				The target client index.
 @return						The PlayerState of the provided client, formatted as described above.
 */
-native int GetClientState(int client);
+native any GetClientState(int client);
 
 /* 
 Returns client index's Treason role as "treasonRole" or "int".
@@ -377,11 +380,109 @@ native any GetIsCarnage(bool includePreRound);
 // TAPI Custom Role natives
 
 /* 
-Gets the CustomRoleIndex of the given client index.
+Returns true if the provided client index has a solo-based custom role.
+Returns false otherwise.
+Also returns false if the provided client index is invalid.
+
+@param client				The target client index.
+@return					Returns true or false as formatted above.
+*/
+native any IsClientSoloCustomRole(int client);
+
+/* 
+Clears the id of a CustomRole using its custom role index.
+This effectively "deletes" a custom role from the internal custom roles array by marking it as invalid.
+
+@param customRoleIndex		The target custom role index.
+*/
+native void ClearCustomRole(int customRoleIndex);
+
+/* 
+Finds the CustomRole index of a CustomRole by searching for a string id.
+Returns -1 if no CustomRole can be found.
+
+@param id				The string id to search for.
+@return					The resulting CustomRole index.
+*/
+native int GetCustomRoleIndex(char[] id);
+
+/* 
+Gets the CustomRole.id (string) of the given custom role index.
+Returns false if the custom role index is invalid.
+Returns true on success.
+
+@param customRoleIndex		The target custom role index.
+@param result				The a buffer to store the string ID of the target custom role index. MaxSize is 32.
+@return					Returns false if the custom role index is invalid.
+*/
+native bool GetCustomRoleID(int customRoleIndex, char[] result);
+
+/* 
+Returns false if the custom role index is invalid.
+Returns true otherwise.
+
+@param customRoleIndex		The target custom role index.
+@return					Returns false if the custom role index is invalid.
+*/
+native bool IsCustomRoleValid(int customRoleIndex);
+
+/* 
+Sets the CustomRole of a client in memory without fully updating the cosmetics until the next round.
+Returns false if the custom role index or client index is invalid.
+Returns true on success.
+
+@param client				The target client index.
+@param customRoleIndex		The target custom role index.
+@return					Returns true on success, or false as formatted above.
+*/
+native bool SetClientCustomRole(int client, int customRoleIndex);
+
+/* 
+Resets the CustomRole of a client in memory to be default (no custom role).
+
+@param client				The target client index.
+*/
+native void ResetClientCustomRole(int client);
+
+/* 
+Gets the CustomRole index of the given client index.
 Returns -1 if client index is invalid.
 Returns 0 if the client is not assigned a custom role.
 
 @param client				The target client index.
-@return						The CustomRoleIndex of the target client.
+@return					The CustomRole index of the target client.
 */
-native int GetClientCustomRole(int client);
+native int GetClientCustomRoleIndex(int client);
+
+/* 
+Registers a CustomRole and returns the CustomRole index.
+This is way too bloated to reasonably make documentation for.
+I reccomend users just read the parameters, as it should be reasonably self-explanatory.
+I also reccomend users to just look at the template role plugin.
+*/
+native int RegisterCustomRole
+(
+	char[] id,
+	char[] displayName,
+	
+	int underlyingRole,
+	int prevalence,
+	int weight,
+	int minPlayers,
+	int maxPlayers,
+	int minTraitors,
+	int minInnocents,
+	bool requireDetective,
+	bool requireDoctor,
+	
+	bool displayAboveText,
+	int roleColor[3],
+	int roleTextBrightness,
+	char[] playerModel,
+	
+	bool discardRoleAbilities,
+	bool discardRoleGadgets,
+	bool keepClassAbility,
+	int abilities[3],
+	int gadgets[2]
+);
