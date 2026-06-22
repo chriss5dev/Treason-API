@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.2.1"
+#define TAPI_VERSION_INCLUDE "1.3"
 
 #include <treason_textpositions>
 
@@ -82,6 +82,15 @@ enum treasonPlayerState
 	TPlayerState_UIFrozen = 9,				TS_UIFrozen = 9
 };
 
+// Assigns PlayerState integers to a readable format
+enum treasonEndCondition
+{
+    TEndCondition_TeamWin = 1, 				TE_TeamWin = 1,
+    TEndCondition_Deathmatch = 2, 			TE_Deathmatch = 2,
+    TEndCondition_Time = 3, 				TE_Time = 3,
+    TEndCondition_CustomSolo = 4, 			TE_Solo = 4
+}
+
 // enum struct
 enum struct CustomRole
 {
@@ -91,25 +100,36 @@ enum struct CustomRole
 	
 	//customrole handler data
 	treasonRole underlyingRole;
+	treasonClass underlyingClass;
 	int prevalence;
 	int weight;
+	int minPlayers;
+	int maxPlayers;
+	int minTraitors;
+	int minInnocents;
+	bool requireDetective;
+	bool requireDoctor;
 	
 	//stats
-	bool setHealth;
-	int health;
+	int maxHealthBonus;
 	
 	//assets and customization
 	bool displayAboveText;
 	int roleColor[3];
+	int roleTextBrightness;
 	char playerModel[PLATFORM_MAX_PATH];
-	//char poleModel[PLATFORM_MAX_PATH];
+	bool useClassPlayerModels;
+	char poleModel[PLATFORM_MAX_PATH];
 	
 	//doohickeys
 	bool discardRoleAbilities;
-	bool discardRoleGadgets; //add to reg
+	bool discardRoleGadgets;
 	bool keepClassAbility;
 	treasonAbility abilities[3];
 	treasonGadget gadgets[2];
+	
+	//extra win conditions
+	bool winIfLastAlive; // Only applies to TR_Solo roles.
 }
 
 // TAPI natives
@@ -207,7 +227,7 @@ Returns -1 if client index is invalid.
 @param client				The target client index.
 @return						The PlayerState of the provided client, formatted as described above.
 */
-native int GetClientState(int client);
+native any GetClientState(int client);
 
 /* 
 Returns client index's Treason role as "treasonRole" or "int".
@@ -377,11 +397,127 @@ native any GetIsCarnage(bool includePreRound);
 // TAPI Custom Role natives
 
 /* 
-Gets the CustomRoleIndex of the given client index.
+Returns true if the provided client index has a solo-based custom role.
+Returns false otherwise.
+Also returns false if the provided client index is invalid.
+
+@param client				The target client index.
+@return					Returns true or false as formatted above.
+*/
+native any IsClientSoloCustomRole(int client);
+
+/* 
+Clears the id of a CustomRole using its custom role index.
+This effectively "deletes" a custom role from the internal custom roles array by marking it as invalid.
+
+@param customRoleIndex		The target custom role index.
+*/
+native void ClearCustomRole(int customRoleIndex);
+
+/* 
+Finds the CustomRole index of a CustomRole by searching for a string id.
+Returns -1 if no CustomRole can be found.
+
+@param id				The string id to search for.
+@return					The resulting CustomRole index.
+*/
+native int GetCustomRoleIndex(char[] id);
+
+/* 
+Gets the CustomRole.id (string) of the given custom role index.
+Returns false if the custom role index is invalid.
+Returns true on success.
+
+@param customRoleIndex		The target custom role index.
+@param result				The a buffer to store the string ID of the target custom role index. MaxSize is 32.
+@return					Returns false if the custom role index is invalid.
+*/
+native bool GetCustomRoleID(int customRoleIndex, char[] result);
+
+/* 
+Returns false if the custom role index is invalid.
+Returns true otherwise.
+
+@param customRoleIndex		The target custom role index.
+@return					Returns false if the custom role index is invalid.
+*/
+native bool IsCustomRoleValid(int customRoleIndex);
+
+/* 
+Sets the CustomRole of a client in memory without fully updating the cosmetics until the next round.
+Returns false if the custom role index or client index is invalid.
+Returns true on success.
+
+@param client				The target client index.
+@param customRoleIndex		The target custom role index.
+@return					Returns true on success, or false as formatted above.
+*/
+native bool SetClientCustomRole(int client, int customRoleIndex);
+
+/* 
+Resets the CustomRole of a client in memory to be default (no custom role).
+
+@param client				The target client index.
+*/
+native void ResetClientCustomRole(int client);
+
+/* 
+Gets the CustomRole index of the given client index.
 Returns -1 if client index is invalid.
 Returns 0 if the client is not assigned a custom role.
 
 @param client				The target client index.
-@return						The CustomRoleIndex of the target client.
+@return					The CustomRole index of the target client.
 */
-native int GetClientCustomRole(int client);
+native int GetClientCustomRoleIndex(int client);
+
+/* 
+Attempts to force the round to end given custom conditions.
+Resolves the custom conditions into more complex sets of event keys.
+*Note the existence of ConVar "tapi_deathmatchmusic".
+
+@param endCondition		The desired endCondition, as a treasonEndCondition or an int.
+@param winner			The desired winning team or client index, depending on the endCondition.
+@return					Returns true on success, or false on failure.
+*/
+native any ForceEndRound(any endCondition, int winner);
+
+/* 
+Registers a CustomRole and returns the CustomRole index.
+This is way too bloated to reasonably make documentation for.
+I reccomend users just read the parameters, as it should be reasonably self-explanatory.
+I also reccomend users to just look at the template role plugin.
+*/
+native int RegisterCustomRole
+(
+	char[] id,
+	char[] displayName,
+	
+	any underlyingRole,
+	any underlyingClass,
+	int prevalence,
+	int weight,
+	int minPlayers,
+	int maxPlayers,
+	int minTraitors,
+	int minInnocents,
+	bool requireDetective,
+	bool requireDoctor,
+	
+	int maxHealth,
+	
+	bool displayAboveText,
+	int roleColor[3],
+	int roleTextBrightness,
+	char[] playerModel,
+	bool useClassPlayerModels,
+	char[] poleModel,
+	
+	bool discardRoleAbilities,
+	bool discardRoleGadgets,
+	bool keepClassAbility,
+	any abilities[3],
+	any gadgets[2],
+	
+	bool winIfLastAlive
+);
