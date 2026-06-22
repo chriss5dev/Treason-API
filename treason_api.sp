@@ -5,8 +5,8 @@
 #include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.2.2"
-#define TAPI_VERSION_INT 010202
+#define TAPI_VERSION "1.3"
+#define TAPI_VERSION_INT 010300
  
 public Plugin myinfo =
 {
@@ -37,6 +37,10 @@ int g_KarmaOffset = -1;
 int g_ZombieOffset = -1;
 int g_RoleOffset = -1;
 
+//ConVars
+ConVar g_cvEnableDeathmatchMusic;
+ConVar g_cvDataForceWinActive;
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	RegPluginLibrary("Treason API");
@@ -48,6 +52,7 @@ public void OnPluginStart()
 {
 	SDKSetup();
 	HookEvents();
+	CreateConVars();
 	RegisterCommands();
 	PrintToServer("[TAPI] Treason API Loaded! Version %s", TAPI_VERSION);
 }
@@ -150,7 +155,7 @@ public void SDKSetup()
 
     if (g_hUpdateRole == null || g_hSetAbility == null || g_hResetAbility == null || g_hSetGadget == null|| g_hResetGadget == null)
     {
-        SetFailState("Failed to create SDKCalls");
+        SetFailState("Failed to run SDKSetup!");
     }
 }
 
@@ -218,10 +223,19 @@ public void RegisterCommands()
 public void HookEvents()
 {
 	HookEvent("round_start", E_RoundStart);
+	HookEvent("round_end", E_RoundEnd, EventHookMode_Pre);
 	HookEvent("preround_start", E_PreRoundStart);
 	HookEvent("player_death", E_PlayerDeath);
 	HookEvent("ability_resus_detective_used", E_ResuscitateDetective);
 	HookEvent("ability_resuscitate_used", E_Resuscitate);
+}
+
+public void CreateConVars()
+{
+	g_cvEnableDeathmatchMusic = CreateConVar("tapi_deathmatchmusic", "0", "Enables the \"carend.wav\" sound that plays at the end of carnage rounds if not set to 0. This has minor visual downsides, such as the winner name being \"[REDACTED]\". To remedy this, the winner is placed in chat.", _, true, 0.0);
+	
+	g_cvDataForceWinActive = FindConVar("tapi_data_forcewinactive");
+
 }
 
 // EVENTS
@@ -230,6 +244,34 @@ public void E_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	g_DetectiveIndex = event.GetInt("detectiveindex");
 	g_DoctorIndex = event.GetInt("doctorindex");
 	g_IsCarnage = event.GetBool("iscarnage");
+}
+
+public Action E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	int forceWinActive = 0;
+	if(g_cvDataForceWinActive != null)
+	{forceWinActive = g_cvDataForceWinActive.IntValue;}
+	int enableDeathmatchMusic = g_cvEnableDeathmatchMusic.IntValue;
+	
+	// if forceWinActive is false && its a deathmatch round end && deathmatch music disabled
+	if(forceWinActive == 0 && event.GetInt("reason") == 2 && enableDeathmatchMusic == 0)
+	{
+		int winner = event.GetInt("winner");
+		
+		if(winner > 0 && IsClientInGame(winner))
+		{
+			// simulate the normal chat text on deathmatch
+			PrintToChatAll("\x07FF7700%N\x07FFFFFF has survived the carnage round!", winner);
+			// Winner will be the POTR for a deathmatch round end
+			SetEventInt(event, "potr_userid", GetClientUserId(winner));
+		}
+		// reason NONE
+		SetEventInt(event, "reason", 0);
+		// set winner to an invalid team (REDACTED wins)
+		SetEventInt(event, "winner", 4);
+		return Plugin_Changed;
+	}
+	return Plugin_Continue;
 }
 
 public void E_PreRoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -488,7 +530,7 @@ public Action Cmd_SetKarma(int client, int args)
 // NATIVES
 public int N_TAPI_Version(Handle plugin, int numParams)
 {
-	return TAPI_VERSION_INT;
+	return view_as<int>(TAPI_VERSION_INT);
 }
 
 public int N_GetClientScoreboardKarma(Handle plugin, int numParams)
@@ -675,9 +717,9 @@ public any N_GetClientRole(Handle plugin, int numParams)
 		any playerState = GetClientState(client);
 		if(playerState == TS_Ghost)
 		{return TR_Ghost;}
-		else if(playerState == TS_Spectator)
+		else if(playerState == TS_Spectator || (playerState != TS_Default && playerState != TS_Injured))
 		{return TR_None;}
-		else if(IsClientSoloCustomRole(client))
+		else if(IsClientSoloCustomRole(client) && (playerState == TS_Default || playerState == TS_Injured))
 		{return TR_Solo;}
 		else
 		{

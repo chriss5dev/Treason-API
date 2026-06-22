@@ -172,7 +172,7 @@ int
 void 
 
 
-treasonRole treasonClass treasonAbility treasonGadget treasonPlayerState CustomRole</Keywords>
+treasonRole treasonClass treasonAbility treasonGadget treasonPlayerState treasonEndCondition CustomRole</Keywords>
             <Keywords name="Keywords4">ADMFLAG_BAN 
 ADMFLAG_CHANGEMAP 
 ADMFLAG_CHAT 
@@ -2773,6 +2773,16 @@ AddChangeHook .IntValue GetBounds GetDefault GetDescription GetName GetString Re
 
 
 TAPI_Version GetClientKarma IsClientZombie GetClientRole GetClientClass GetClientAbility GetClientAbilities GetDetectiveIndex GetDoctorIndex GetClientGadget GetClientGadgets GetIsCarnage
+IsClientSoloCustomRole
+ClearCustomRole
+GetCustomRoleIndex
+GetCustomRoleID
+IsCustomRoleValid
+SetClientCustomRole
+ResetClientCustomRole
+GetClientCustomRoleIndex
+ForceEndRound
+RegisterCustomRole
 GetClientScoreboardKarma
 SetClientKarma
 SetClientZombie
@@ -2795,7 +2805,7 @@ GetClientCustomRole
  TRole_Detective TR_Detective
  TRole_Doctor TR_Doctor TRole_Annihilator TR_Annihilator TRole_Ghost TR_Ghost
  TRole_Independent
- TRole_Solo
+ TR_Solo
 TClass_Invalid TC_None
  TClass_Light   TC_Light
  TClass_Medium   TC_Med
@@ -2825,11 +2835,31 @@ TPlayerState_Injured
 TS_Injured
 TPlayerState_Ghost
 TS_Ghost
-
-
-
-
-
+TEndCondition_TeamWin
+TEndCondition_Deathmatch
+TEndCondition_Time
+TEndCondition_CustomSolo
+TE_TeamWin
+TE_Deathmatch
+TE_Time
+TE_Solo
+ABOVECHATTEXT_X
+ABOVECHATTEXT_Y
+ABOVECENTERTEXT_X
+ABOVECENTERTEXT_Y
+ROLETEXT_X
+ROLETEXT_Y
+JESTERTEXT_X
+JESTERTEXT_Y
+RIGHTOFCLUESTEXT_X
+RIGHTOFCLUESTEXT_Y
+ROLE_LEFTTEXT_X
+ROLE_SOLOTEXT_X
+ROLE_TEXT_Y
+ROLE_ABOVETEXT_Y
+ROLE_BACKGROUND_X
+ROLE_BACKGROUND_Y
+AUTO_CHANNEL
 </Keywords>
             <Keywords name="Keywords7">E_
 

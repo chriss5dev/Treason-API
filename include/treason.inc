@@ -2,7 +2,7 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.2.1"
+#define TAPI_VERSION_INCLUDE "1.3"
 
 #include <treason_textpositions>
 
@@ -82,6 +82,15 @@ enum treasonPlayerState
 	TPlayerState_UIFrozen = 9,				TS_UIFrozen = 9
 };
 
+// Assigns PlayerState integers to a readable format
+enum treasonEndCondition
+{
+    TEndCondition_TeamWin = 1, 				TE_TeamWin = 1,
+    TEndCondition_Deathmatch = 2, 			TE_Deathmatch = 2,
+    TEndCondition_Time = 3, 				TE_Time = 3,
+    TEndCondition_CustomSolo = 4, 			TE_Solo = 4
+}
+
 // enum struct
 enum struct CustomRole
 {
@@ -91,6 +100,7 @@ enum struct CustomRole
 	
 	//customrole handler data
 	treasonRole underlyingRole;
+	treasonClass underlyingClass;
 	int prevalence;
 	int weight;
 	int minPlayers;
@@ -100,19 +110,26 @@ enum struct CustomRole
 	bool requireDetective;
 	bool requireDoctor;
 	
+	//stats
+	int maxHealthBonus;
+	
 	//assets and customization
 	bool displayAboveText;
 	int roleColor[3];
 	int roleTextBrightness;
 	char playerModel[PLATFORM_MAX_PATH];
-	//char poleModel[PLATFORM_MAX_PATH];
+	bool useClassPlayerModels;
+	char poleModel[PLATFORM_MAX_PATH];
 	
 	//doohickeys
 	bool discardRoleAbilities;
-	bool discardRoleGadgets; //add to reg
+	bool discardRoleGadgets;
 	bool keepClassAbility;
 	treasonAbility abilities[3];
 	treasonGadget gadgets[2];
+	
+	//extra win conditions
+	bool winIfLastAlive; // Only applies to TR_Solo roles.
 }
 
 // TAPI natives
@@ -455,6 +472,17 @@ Returns 0 if the client is not assigned a custom role.
 native int GetClientCustomRoleIndex(int client);
 
 /* 
+Attempts to force the round to end given custom conditions.
+Resolves the custom conditions into more complex sets of event keys.
+*Note the existence of ConVar "tapi_deathmatchmusic".
+
+@param endCondition		The desired endCondition, as a treasonEndCondition or an int.
+@param winner			The desired winning team or client index, depending on the endCondition.
+@return					Returns true on success, or false on failure.
+*/
+native any ForceEndRound(any endCondition, int winner);
+
+/* 
 Registers a CustomRole and returns the CustomRole index.
 This is way too bloated to reasonably make documentation for.
 I reccomend users just read the parameters, as it should be reasonably self-explanatory.
@@ -465,7 +493,8 @@ native int RegisterCustomRole
 	char[] id,
 	char[] displayName,
 	
-	int underlyingRole,
+	any underlyingRole,
+	any underlyingClass,
 	int prevalence,
 	int weight,
 	int minPlayers,
@@ -475,14 +504,20 @@ native int RegisterCustomRole
 	bool requireDetective,
 	bool requireDoctor,
 	
+	int maxHealth,
+	
 	bool displayAboveText,
 	int roleColor[3],
 	int roleTextBrightness,
 	char[] playerModel,
+	bool useClassPlayerModels,
+	char[] poleModel,
 	
 	bool discardRoleAbilities,
 	bool discardRoleGadgets,
 	bool keepClassAbility,
-	int abilities[3],
-	int gadgets[2]
+	any abilities[3],
+	any gadgets[2],
+	
+	bool winIfLastAlive
 );

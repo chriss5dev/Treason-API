@@ -1,20 +1,27 @@
 #pragma semicolon 1
 #include <sourcemod>
 #include <sdktools>
+#include <sdkhooks>
+#include <dhooks>
 #include <treason>
 #include <chriss5math>
 #define MAXCUSTOMROLES 16
+#define REQUIRED_TAPI_VERSION 010300
  
 public Plugin myinfo =
 {
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Included in the Treason API.",
-	version = "1.0",
+	version = "0.9",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
 GlobalForward g_RegisterCustomRolesForward;
+GlobalForward g_SoloStoppedRoundEndForward;
+GlobalForward g_SoloWinForward;
+GlobalForward g_ClearRolesForward;
+GlobalForward g_AssignedCustomRoleForward;
 
 ConVar g_cvMinCustomRolesTraitor;
 ConVar g_cvMinCustomRolesInnocent;
@@ -23,40 +30,62 @@ ConVar g_cvMaxCustomRolesTraitor;
 ConVar g_cvMaxCustomRolesInnocent;
 ConVar g_cvMaxCustomRolesSolo;
 ConVar g_cvAction1Key;
+ConVar g_cvEnableDeathmatchMusic;
+ConVar g_cvDataForceWinActive;
 
 public CustomRole g_CustomRoles[MAXCUSTOMROLES];
 public int g_ClientRoles[MAXPLAYERS+1];
+public int g_ClientClasses[MAXPLAYERS+1];
+public bool g_TempDisabledClients[MAXPLAYERS+1];
+public bool g_RecentlySelectedSoloClients[MAXPLAYERS+1];
 Handle g_HudTimer = INVALID_HANDLE;
-public int whiteColor[3];
-public treasonAbility emptyAbilities[3];
-public treasonGadget emptyGadgets[2];
+
+Handle g_hEndRound = INVALID_HANDLE;
+
+int endConditionOverride = -1;
+int potrOverride = -1;
+int winnerOverride = -1;
+bool forceWinActive = false;
+bool g_lastInnocentTriggeredThisRound = false;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	RegPluginLibrary("Treason Custom Roles");
 	CreateNatives();
 	
-	whiteColor[0] = 255;
-	whiteColor[1] = 255;
-	whiteColor[2] = 255;
-	emptyAbilities[0] = TA_None;
-	emptyAbilities[1] = TA_None;
-	emptyAbilities[2] = TA_None;
-	emptyGadgets[0] = TG_None;
-	emptyGadgets[1] = TG_None;
-	
 	return APLRes_Success;
+}
+
+public void OnAllPluginsLoaded()
+{
+	if (TAPI_Version() < REQUIRED_TAPI_VERSION)
+	{
+		SetFailState(
+			"[TCR] Treason Custom Roles requires Treason API version %d or later!",
+			REQUIRED_TAPI_VERSION
+		);
+	}
 }
 
 // initialize and setup
 public void OnPluginStart()
 {
+	SDKSetup();
 	CreateForwards();
 	CreateConVars();
 	HookEvents();
 	RegisterCommands();
 	ClearCustomRoles();
-	PrintToServer("[TAPI] Treason Custom Roles Loaded!");
+	PrintToServer("[TCR] Treason Custom Roles Loaded!");
+}
+
+public void OnMapStart()
+{
+	AddFolderToDownloadsTable("models/props_cluesystem/custom");
+	AddFolderToDownloadsTable("models/player/custom");
+	AddFolderToDownloadsTable("materials/hud/playercard/custom");
+	AddFolderToDownloadsTable("materials/models/player/custom");
+	AddFolderToDownloadsTable("materials/models/props_cluesystem/custom");
 }
 
 public void OnClientPostAdminCheck(int client)
@@ -64,65 +93,120 @@ public void OnClientPostAdminCheck(int client)
 	char action1Key[16];
 	g_cvAction1Key.GetString(action1Key, sizeof(action1Key));
 	ClientCommand(client, "bind \"%s\" \"tapi_action1\"", action1Key);
-	PrintToChat(client, "bind \"%s\" \"tapi_action1\"", action1Key);
+	
+	if (!IsFakeClient(client))
+	{
+		QueryClientConVar(client, "cl_downloadfilter", OnDownloadFilterChecked);
+	}
+}
+
+public void OnDownloadFilterChecked
+(
+	QueryCookie cookie,
+	int client,
+	ConVarQueryResult result,
+	const char[] cvarName,
+	const char[] cvarValue
+)
+{
+	if (!IsClientInGame(client)) {return;}
+	
+	if (result != ConVarQuery_Okay)
+	{
+		KickClient(client, "Could not verify your multiplayer download settings.");
+		return;
+	}
+	if (!StrEqual(cvarValue, "all", false))
+	{
+		KickClient(client, "You must allow all custom downloads to play on this server. You can change this under the \"Multiplayer\" settings tab.");
+		return;
+	}
+}
+
+public void OnClientPutInServer(int client)
+{
+	g_ClientRoles[client] = 0;
+	g_ClientClasses[client] = 0;
+	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+}
+
+public void OnClientDisconnect(int client)
+{
+	g_ClientRoles[client] = 0;
+	g_ClientClasses[client] = 0;
+	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+}
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (!StrEqual(classname, "prop_physics")) {return;}
+
+	RequestFrame(CheckNewPropPhysics, EntIndexToEntRef(entity));
+}
+
+public void CheckNewPropPhysics(any ref)
+{
+	int entity = EntRefToEntIndex(ref);
+
+	if (entity == INVALID_ENT_REFERENCE || !IsValidEntity(entity)) {return;}
+
+	char model[PLATFORM_MAX_PATH];
+	GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model));
+
+	if (!StrEqual(model, "models/props_cluesystem/pole.mdl", false)) {return;}
+	
+	HandlePoleEntity(entity);
+
+	PrintToServer("[TCR] Debug - Replaced pole model on entity %d", entity);
+}
+
+public void SDKSetup()
+{
+	Handle hGameConf = LoadGameConfigFile("game.treason");
+	if (hGameConf == null)
+	{
+		SetFailState("Failed to load gamedata file 'game.treason.txt'");
+	}
+	
+	g_hEndRound = DHookCreateFromConf(hGameConf, "EndRound");
+	if (g_hEndRound == INVALID_HANDLE)
+	{
+		SetFailState("Failed to create EndRound detour");
+	}
+
+	if (!DHookEnableDetour(g_hEndRound, false, Detour_EndRound))
+	{
+		SetFailState("Failed to enable EndRound pre-detour");
+	}
+	
+	delete hGameConf;
+	if (g_hEndRound == null)
+	{
+		SetFailState("Failed to run SDKSetup!");
+	}
 }
 
 public void OnRegisterCustomRoles()
 {
-	int reg = RegCustomRole
-	(
-		// char[] id,
-		"lonewolf",
-		// char[] displayName,
-		"Lone Wolf",
-		// int underlyingRole,
-		TR_Solo,
-		// int prevalence,
-		1,
-		// int weight,
-		1,
-		// int minPlayers,
-		0,
-		// int maxPlayers,
-		16,
-		// int minTraitors,
-		0,
-		// int minInnocents,
-		0,
-		// bool requireDetective,
-		false,
-		// bool requireDoctor,
-		false,
-		// bool displayAboveText,
-		true,
-		// int roleColor[3],
-		whiteColor,
-		// int roleTextBrightness,
-		0,
-		// char[] playerModel,
-		"models/player/custom/lonewolf/lonewolf.mdl",
-		// bool discardRoleAbilities,
-		true,
-		// bool discardRoleGadgets,
-		true,
-		// bool keepClassAbility,
-		true,
-		// int abilities[3],
-		emptyAbilities,
-		// int gadgets[2]
-		emptyGadgets
-	);
-	PrintToChatAll("return: %d", reg);
+	// nothing
 }
 
 // shortcut functions
 public void CreateForwards()
 {
 	g_RegisterCustomRolesForward = new GlobalForward("OnRegisterCustomRoles", ET_Ignore);
+	g_SoloStoppedRoundEndForward = new GlobalForward("OnSoloStoppedRoundEnd", ET_Ignore, Param_Cell);
+	g_SoloWinForward = new GlobalForward("OnSoloWin", ET_Ignore, Param_Cell, Param_Cell);
+	g_ClearRolesForward = new GlobalForward("OnClearCustomRoles", ET_Ignore);
+	g_AssignedCustomRoleForward = new GlobalForward("OnClientAssignedCustomRole", ET_Ignore, Param_Cell, Param_Cell);
 }
 
 public void CreateConVars()
 {
+	g_cvEnableDeathmatchMusic = FindConVar("tapi_deathmatchmusic");
+	
+	g_cvDataForceWinActive = CreateConVar("tapi_data_forcewinactive", "0", "Provides the sate of forceWinActive to other plugins.", FCVAR_SPONLY);
+
 	g_cvAction1Key = CreateConVar("tapi_keybind1", "6", "The key used to forcebind console command \"tapi_action1\" for all clients.");
 	g_cvMinCustomRolesTraitor = CreateConVar("tapi_cr_min_traitor", "1", "The minimum amount of custom traitor-roles to consider assigning to traitors at round start, when possible.", _, true, 0.0);
 	g_cvMinCustomRolesInnocent = CreateConVar("tapi_cr_min_innocent", "1", "The minimum amount of custom innocent-roles to consider assigning to innocents at round start, when possible.", _, true, 0.0);
@@ -142,18 +226,23 @@ public void CreateNatives()
 	CreateNative("SetClientCustomRole", N_SetClientCustomRole);
 	CreateNative("ResetClientCustomRole", N_ResetClientCustomRole);
 	CreateNative("GetClientCustomRoleIndex", N_GetClientCustomRoleIndex);
+	CreateNative("ForceEndRound", N_ForceEndRound);
 	CreateNative("RegisterCustomRole", N_RegisterCustomRole);
 }
 
 public void HookEvents()
 {
 	HookEvent("preround_start", E_PreRoundStart);
-	HookEvent("round_start", E_RoundStart, EventHookMode_Post);
-	HookEvent("round_end", E_RoundEnd);
+	HookEvent("round_start", E_RoundStartPre, EventHookMode_Pre);
+	HookEvent("round_start", E_RoundStartPost, EventHookMode_Post);
+	HookEvent("round_end", E_RoundEnd, EventHookMode_Pre);
 	HookEvent("role_revealed", E_AllRoleRevealEvents, EventHookMode_Pre);
 	HookEvent("first_body_found", E_AllRoleRevealEvents, EventHookMode_Pre);
 	HookEvent("first_role_revealed", E_AllRoleRevealEvents, EventHookMode_Pre);
-	//HookEvent("player_death", E_PlayerDeath);
+	HookEvent("ability_resuscitate_used", E_Resuscitate, EventHookMode_Post);
+	HookEvent("ability_revive_used", E_Revive, EventHookMode_Post);
+	HookEvent("last_innocent", E_LastInnocent, EventHookMode_Pre);
+	HookEvent("player_class", E_PlayerChangeClass, EventHookMode_Post);
 	//HookEvent("ability_resus_detective_used", E_ResuscitateDetective);
 	//HookEvent("ability_resuscitate_used", E_Resuscitate);
 }
@@ -165,24 +254,53 @@ public void RegisterCommands()
 	//temp
 	RegAdminCmd("sm_getcr", CmdGetCustomRole, ADMFLAG_ROOT);
 	RegAdminCmd("sm_setcr", CmdSetCustomRole, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_listcr", CmdListCustomRoles, ADMFLAG_ROOT);
 	RegAdminCmd("sm_listcr", CmdListCustomRoles, ADMFLAG_ROOT);
 	
-	RegAdminCmd("tapi_cr_get", CmdGetCustomRole, ADMFLAG_ROOT);
-	RegAdminCmd("tapi_cr_list", CmdListCustomRoles, ADMFLAG_ROOT);
+	RegAdminCmd("tcr_get", CmdGetCustomRole, ADMFLAG_ROOT);
+	RegAdminCmd("tcr_list", CmdListCustomRoles, ADMFLAG_ROOT);
 }
 
 //EVENTS
 public void E_PreRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	//tell all the customrole plugins to register their roles
+	if(forceWinActive)
+	{
+		//in the case this is accidentally true, set to false
+		forceWinActive = false;
+		g_cvDataForceWinActive.SetInt(0);
+	}
+	//reset global bool for whether last_innocent has already happened in the round
+	g_lastInnocentTriggeredThisRound = false;
+	//unassign all the customroles from clients
+	ClearClientCustomRoles();
+	//wipe all the registered roles
 	ClearCustomRoles();
-	PrintToServer("[TAPI] Calling Global Forward \"OnRegisterCustomRoles()\"...");
+	//tell all the customrole plugins to register their roles
+	PrintToServer("[TCR] Calling Global Forward \"OnRegisterCustomRoles()\"...");
 	Call_StartForward(g_RegisterCustomRolesForward);
 	Call_Finish();
 }
 
-public void E_RoundStart(Event event, const char[] name, bool dontBroadcast)
+public void E_RoundStartPre(Event event, const char[] name, bool dontBroadcast)
 {
+	bool isCarnage = event.GetBool("iscarnage");
+	if(!isCarnage)
+	{
+		for(int i = 1;i <= MaxClients; i++)
+		{
+			if(!IsClientInGame(i)) {continue;}
+			
+			g_ClientClasses[i] = GetEntProp(i, Prop_Send, "m_iClass");
+		}
+	}
+}
+
+public void E_RoundStartPost(Event event, const char[] name, bool dontBroadcast)
+{
+	TempDisableRatingPunishments();
+	ResetAllKarma();
+	
 	bool isCarnage = event.GetBool("iscarnage");
 	if(!isCarnage)
 	{
@@ -195,21 +313,42 @@ public void E_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+public Action E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
-	ClearClientCustomRoles();
-	ClearCustomRoles();
-	
 	if(g_HudTimer != INVALID_HANDLE)
 	{
 		KillTimer(g_HudTimer);
 		g_HudTimer = INVALID_HANDLE;
 	}
-}
-
-public void E_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
-{
-	//why did i make this? maybe ill use it later
+	
+	if(forceWinActive)
+	{
+		//reset it so we don't accidentally do this again
+		forceWinActive = false;
+		g_cvDataForceWinActive.SetInt(0);
+		if(endConditionOverride != -1)
+		{
+			SetEventInt(event, "reason", endConditionOverride);
+			endConditionOverride = -1;
+		}
+		if(potrOverride != -1)
+		{
+			int userid = GetClientUserId(potrOverride);
+			SetEventInt(event, "potr_userid", userid);
+			potrOverride = -1;
+		}
+		if(winnerOverride != -1)
+		{
+			SetEventInt(event, "winner", winnerOverride);
+			winnerOverride = -1;
+		}
+		ClearClientCustomRoles();
+		ClearCustomRoles();
+		return Plugin_Changed;
+	}
+	ClearClientCustomRoles();
+	ClearCustomRoles();
+	return Plugin_Continue;
 }
 
 public Action E_AllRoleRevealEvents(Event event, const char[] name, bool dontBroadcast)
@@ -224,10 +363,90 @@ public Action E_AllRoleRevealEvents(Event event, const char[] name, bool dontBro
 	return Plugin_Continue;
 }
 
+public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	//if dmg will kill them
+	if (victim != 0 && damage >= GetClientHealth(victim))
+	{
+		int user = GetClientUserId(victim);
+		CreateTimer(0.1, Timer_HandleClientDeath, user);
+	}
+	
+	return Plugin_Continue;
+}
+
+public Action E_LastInnocent(Event event, const char[] name, bool dontBroadcast)
+{
+	if(g_lastInnocentTriggeredThisRound)
+	{return Plugin_Handled;}
+
+	int soloLastAlive = IsSurvivorSoloLastAlive();
+	if (soloLastAlive != 0)
+	{
+		SoloWin(soloLastAlive);
+		return Plugin_Handled;
+	}
+	
+	bool innocentAlive = false;
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i)) {continue;}
+		
+		any role = GetClientRole(i);
+		// find if there is an alive innocent type
+		// (because solo is technically an innocent ID and the handler calling the event doesnt know that, so we have to cancel it if its wrong)
+		if(role == TR_Innocent || role == TR_Detective || role == TR_Doctor)
+		{
+			innocentAlive = true;
+			break;
+		}
+	}
+	
+	if(!innocentAlive)
+	{return Plugin_Handled;}
+	
+	g_lastInnocentTriggeredThisRound = true;
+	return Plugin_Continue;
+}
+
+public void E_Resuscitate(Event event, const char[] name, bool dontBroadcast)
+{
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i) || GetClientRole(i) == TR_None || GetClientRole(i) == TR_Ghost || IsClientZombie(i)) {continue;}
+		
+		int roleIndex = GetClientCustomRoleIndex(i);
+		if(!IsCustomRoleValid(roleIndex)) {continue;}
+		
+		// find temp disabled custom role clients (non-zombie)
+		if(g_TempDisabledClients[i])
+		{
+			//re-enable them
+			g_TempDisabledClients[i] = false;
+			InitClientCustomRole(i);
+		}
+	}
+}
+
+public void E_Revive(Event event, const char[] name, bool dontBroadcast)
+{
+	//unused
+}
+
+public void E_PlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	int newClass = event.GetInt("class");
+	
+	if(!IsClientInGame(client)) {return;}
+	
+	g_ClientClasses[client] = newClass;
+}
+
 //COMMANDS
 public Action CmdAction1(int client, int args)
 {
-	PrintToChat(client, "Used Action1 bind.");
+	//make forward here
 	return Plugin_Handled;
 }
 
@@ -254,11 +473,11 @@ public Action CmdListCustomRoles(int client, int args)
 		{
 			char id[32];
 			char displayName[32];
-			strcopy(id, sizeof(g_CustomRoles[i].id), g_CustomRoles[i].id);
-			strcopy(displayName, sizeof(g_CustomRoles[i].displayName), g_CustomRoles[i].displayName);
-			PrintToChat(client, "### %s ###", displayName);
-			PrintToChat(client, "Index: %d", i);
-			PrintToChat(client, "ID: %s", id);
+			strcopy(id, sizeof(id), g_CustomRoles[i].id);
+			strcopy(displayName, sizeof(displayName), g_CustomRoles[i].displayName);
+			PrintToConsole(client, "### %s ###", displayName);
+			PrintToConsole(client, "Index: %d", i);
+			PrintToConsole(client, "ID: %s", id);
 		}
 	}
 	return Plugin_Handled;
@@ -271,12 +490,25 @@ public void ClearCustomRoles()
 	{
 		g_CustomRoles[i].id[0] = '\0';
 	}
+	PrintToServer("[TCR] Calling Global Forward \"OnClearCustomRoles()\"...");
+	Call_StartForward(g_ClearRolesForward);
+	Call_Finish();
 }
 
 public void ClearClientCustomRoles()
 {
 	for(int i = 1;i <= MaxClients; i++)
 	{
+		g_TempDisabledClients[i] = false;
+		int customRole = g_ClientRoles[i];
+		if(customRole != 0 && IsClientInGame(i))
+		{
+			any class = GetEntProp(i, Prop_Send, "m_iClass");
+			if(class != g_ClientClasses[i] && class == g_CustomRoles[customRole].underlyingClass)
+			{
+				SetEntProp(i, Prop_Send, "m_iClass", g_ClientClasses[i]);
+			}
+		}
 		g_ClientRoles[i] = 0;
 	}
 }
@@ -284,7 +516,7 @@ public void ClearClientCustomRoles()
 public any N_IsClientSoloCustomRole(Handle plugin, int numParams)
 {
 	int client = GetNativeCell(1);
-	if(client > 0 && client <= MaxClients && IsClientInGame(client) && (GetClientState(client) == TS_Default || GetClientState(client) == TS_Injured))
+	if(client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
 		//get the CustomRole enum struct data
 		CustomRole role;
@@ -307,37 +539,44 @@ public void N_ClearCustomRole(Handle plugin, int numParams)
 
 public int N_RegisterCustomRole(Handle plugin, int numParams)
 {
-	if(numParams<20)
+	if(numParams<24)
 	{return -1;}
 	char id[32];
-	if(GetNativeString(1, id, 32) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 1!"); return -1;}
+	if(GetNativeString(1, id, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 1!"); return -1;}
 	char displayName[32];
-	if(GetNativeString(2, displayName, 32) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 2!"); return -1;}
+	if(GetNativeString(2, displayName, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 2!"); return -1;}
 	
 	any underlyingRole = GetNativeCell(3);
-	int prevalence = GetNativeCell(4);
-	int weight = GetNativeCell(5);
-	int minPlayers = GetNativeCell(6);
-	int maxPlayers = GetNativeCell(7);
-	int minTraitors = GetNativeCell(8);
-	int minInnocents = GetNativeCell(9);
-	bool requireDetective = GetNativeCell(10);
-	bool requireDoctor = GetNativeCell(11);
+	any underlyingClass = GetNativeCell(4);
+	int prevalence = GetNativeCell(5);
+	int weight = GetNativeCell(6);
+	int minPlayers = GetNativeCell(7);
+	int maxPlayers = GetNativeCell(8);
+	int minTraitors = GetNativeCell(9);
+	int minInnocents = GetNativeCell(10);
+	bool requireDetective = GetNativeCell(11);
+	bool requireDoctor = GetNativeCell(12);
 	
-	bool displayAboveText = GetNativeCell(12);
+	int maxHealthBonus = GetNativeCell(13);
+	
+	bool displayAboveText = GetNativeCell(14);
 	int roleColor[3];
-	if(GetNativeArray(13, roleColor, 3) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 13!"); return -1;}
-	int roleTextBrightness = GetNativeCell(14);
+	if(GetNativeArray(15, roleColor, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 15!"); return -1;}
+	int roleTextBrightness = GetNativeCell(16);
 	char playerModel[PLATFORM_MAX_PATH];
-	if(GetNativeString(15, playerModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 15!"); return -1;}
+	if(GetNativeString(17, playerModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 17!"); return -1;}
+	bool useClassPlayerModels = GetNativeCell(18);
+	char poleModel[PLATFORM_MAX_PATH];
+	if(GetNativeString(19, poleModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 19!"); return -1;}
 	
-	bool discardRoleAbilities = GetNativeCell(16);
-	bool discardRoleGadgets = GetNativeCell(17);
-	bool keepClassAbility = GetNativeCell(18);
+	bool discardRoleAbilities = GetNativeCell(20);
+	bool discardRoleGadgets = GetNativeCell(21);
+	bool keepClassAbility = GetNativeCell(22);
 	any abilities[3];
-	if(GetNativeArray(19, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 19!"); return -1;}
+	if(GetNativeArray(23, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 23!"); return -1;}
 	any gadgets[2];
-	if(GetNativeArray(20, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TAPI] Debug - N_RegisterCustomRole failed at parameter 20!"); return -1;}
+	if(GetNativeArray(24, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 24!"); return -1;}
+	bool winIfLastAlive = GetNativeCell(25);
 	
 	return RegCustomRole
 	(
@@ -345,6 +584,7 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 		displayName,
 		
 		underlyingRole,
+		underlyingClass,
 		prevalence,
 		weight,
 		minPlayers,
@@ -354,16 +594,22 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 		requireDetective,
 		requireDoctor,
 		
+		maxHealthBonus,
+		
 		displayAboveText,
 		roleColor,
 		roleTextBrightness,
 		playerModel,
+		useClassPlayerModels,
+		poleModel,
 		
 		discardRoleAbilities,
 		discardRoleGadgets,
 		keepClassAbility,
 		abilities,
-		gadgets
+		gadgets,
+		
+		winIfLastAlive
 	);
 }
 
@@ -373,6 +619,7 @@ public int RegCustomRole
 	const char[] displayName,
 	
 	treasonRole underlyingRole,
+	treasonClass underlyingClass,
 	int prevalence,
 	int weight,
 	int minPlayers,
@@ -382,18 +629,35 @@ public int RegCustomRole
 	bool requireDetective,
 	bool requireDoctor,
 	
+	int maxHealthBonus,
+	
 	bool displayAboveText,
 	int roleColor[3],
 	int roleTextBrightness,
 	const char[] playerModel,
+	bool useClassPlayerModels,
+	const char[] poleModel,
 	
 	bool discardRoleAbilities,
 	bool discardRoleGadgets,
 	bool keepClassAbility,
 	treasonAbility abilities[3],
-	treasonGadget gadgets[2]
+	treasonGadget gadgets[2],
+	
+	bool winIfLastAlive
 )
 {
+	//check if this ID is already registered
+	for (int i = 1; i < MAXCUSTOMROLES; i++)
+	{
+		if(StrEqual(g_CustomRoles[i].id, id, false))
+		{
+			PrintToServer("[TCR] Debug - Duplicate custom role ID \"%s\".", id);
+			return -1;
+		}
+	}
+	
+	//iterate to find empty slot
 	for (int i = 1; i < MAXCUSTOMROLES; i++)
 	{
 		if (!IsCustomRoleValid(i))
@@ -401,17 +665,22 @@ public int RegCustomRole
 			//check for invalid values
 			if(id[0] == '\0')
 			{
-				PrintToServer("[TAPI] A Custom Role tried to register with invalid text ID! This custom role will not be registered.");
+				PrintToServer("[TCR] A Custom Role tried to register with invalid text ID! This custom role will not be registered.");
 				return -1;
 			}
 			if(displayName[0] == '\0')
 			{
-				PrintToServer("[TAPI] A Custom Role tried to register with invalid displayName! This custom role will not be registered.");
+				PrintToServer("[TCR] A Custom Role tried to register with invalid displayName! This custom role will not be registered.");
 				return -1;
 			}
 			if(underlyingRole != TR_Innocent && underlyingRole != TR_Traitor && underlyingRole != TR_Solo)
 			{
-				PrintToServer("[TAPI] Custom Role ID \"%s\" tried to register with invalid underlyingRole! This custom role will not be registered.", id);
+				PrintToServer("[TCR] Custom Role ID \"%s\" tried to register with invalid underlyingRole! This custom role will not be registered.", id);
+				return -1;
+			}
+			if(underlyingClass != TC_Light && underlyingClass != TC_Med && underlyingClass != TC_Heavy && underlyingClass != TC_None)
+			{
+				PrintToServer("[TCR] Custom Role ID \"%s\" tried to register with invalid underlyingClass! If you wish to not use an underlyingClass, use TC_None or TC_Invalid. This custom role will not be registered.", id);
 				return -1;
 			}
 			
@@ -421,6 +690,7 @@ public int RegCustomRole
 			
 			//customrole handler data
 			g_CustomRoles[i].underlyingRole = underlyingRole;
+			g_CustomRoles[i].underlyingClass = underlyingClass;
 			g_CustomRoles[i].prevalence = prevalence;
 			g_CustomRoles[i].weight = weight;
 			g_CustomRoles[i].minPlayers = minPlayers;
@@ -430,8 +700,10 @@ public int RegCustomRole
 			g_CustomRoles[i].requireDetective = requireDetective;
 			g_CustomRoles[i].requireDoctor = requireDoctor;
 			
-			g_CustomRoles[i].displayAboveText = displayAboveText;
+			//stats
+			g_CustomRoles[i].maxHealthBonus = maxHealthBonus;
 			
+			g_CustomRoles[i].displayAboveText = displayAboveText;
 			//roleColor
 			g_CustomRoles[i].roleColor[0] = roleColor[0];
 			g_CustomRoles[i].roleColor[1] = roleColor[1];
@@ -441,6 +713,8 @@ public int RegCustomRole
 			
 			//models
 			strcopy(g_CustomRoles[i].playerModel, sizeof(g_CustomRoles[].playerModel), playerModel);
+			g_CustomRoles[i].useClassPlayerModels = useClassPlayerModels;
+			strcopy(g_CustomRoles[i].poleModel, sizeof(g_CustomRoles[].poleModel), poleModel);
 			
 			//doohickeys
 			g_CustomRoles[i].discardRoleAbilities = discardRoleAbilities;
@@ -451,19 +725,57 @@ public int RegCustomRole
 			g_CustomRoles[i].abilities[2] = abilities[2];
 			g_CustomRoles[i].gadgets[0] = gadgets[0];
 			g_CustomRoles[i].gadgets[1] = gadgets[1];
+			
+			//extra win conditions
+			g_CustomRoles[i].winIfLastAlive = winIfLastAlive;
 
-			//precache
-			if(!StrEqual(playerModel, "default", true) && !IsModelPrecached(playerModel))
+			//precache playerModel
+			if(!useClassPlayerModels && !StrEqual(playerModel, "default", true) && !IsModelPrecached(playerModel))
 			{
 				if(PrecacheModel(playerModel, true) == 0)
-				{PrintToServer("[TAPI] Invalid model or modelpath in custom role \"%s\"! Register this custom role with playerModel \"default\" if you do not want to use a custom playermodel!", id);}
+				{PrintToServer("[TCR] Invalid model path in custom role \"%s\"! Register this custom role with playerModel \"default\" if you do not want to use a custom playermodel!", id);}
+			}
+			//or precache class playerModels
+			else if(useClassPlayerModels && !StrEqual(playerModel, "default", true))
+			{
+				PrecacheClassModels(playerModel);
+			}
+			if(!StrEqual(poleModel, "default", true) && !IsModelPrecached(poleModel))
+			{
+				if(PrecacheModel(poleModel, true) == 0)
+				{PrintToServer("[TCR] Invalid model path in custom role \"%s\"! Register this custom role with poleModel \"default\" if you do not want to use a custom pole model!", id);}
 			}
 			
-			PrintToServer("[TAPI] Custom role \"%s\" assigned to CustomRoleID %d.", id, i);
+			PrintToServer("[TCR] Custom role \"%s\" assigned to CustomRoleID %d.", id, i);
 			return i;
 		}
 	}
 	return -1;
+}
+
+public void PrecacheClassModels(const char[] playerModel)
+{
+	char lightPath[PLATFORM_MAX_PATH];
+	char mediumPath[PLATFORM_MAX_PATH];
+	char heavyPath[PLATFORM_MAX_PATH];
+	Format(lightPath, sizeof(lightPath), "%s%s", playerModel, "_light.mdl");
+	Format(mediumPath, sizeof(mediumPath), "%s%s", playerModel, "_medium.mdl");
+	Format(heavyPath, sizeof(heavyPath), "%s%s", playerModel, "_heavy.mdl");
+	
+	if
+	(
+		IsModelPrecached(lightPath)
+	&&	IsModelPrecached(mediumPath)
+	&&	IsModelPrecached(heavyPath)
+	)
+	{return;}
+	else if
+	(
+		PrecacheModel(lightPath, true) == 0
+	||	PrecacheModel(mediumPath, true) == 0
+	||	PrecacheModel(heavyPath, true) == 0
+	)
+	{PrintToServer("[TCR] Invalid class model prefix path or missing .mdl files \"%s\"! Your prefix path should NOT end in .mdl and should be valid when \"_light.mdl\", \"_medium.mdl\", and \"_heavy.mdl\" are appended to the end.", playerModel);}
 }
 
 public int N_GetCustomRoleIndex(Handle plugin, int numParams)
@@ -513,6 +825,10 @@ public any N_SetClientCustomRole(Handle plugin, int numParams)
 	if(IsCustomRoleValid(customRoleIndex) && client > 0 && IsClientInGame(client))
 	{
 		g_ClientRoles[client] = customRoleIndex;
+		Call_StartForward(g_AssignedCustomRoleForward);
+		Call_PushCell(client);
+		Call_PushCell(customRoleIndex);
+		Call_Finish();
 		return true;
 	}
 	return false;
@@ -530,14 +846,99 @@ public int N_GetClientCustomRoleIndex(Handle plugin, int numParams)
 	return g_ClientRoles[client];
 }
 
+
+public any N_ForceEndRound(Handle plugin, int numParams)
+{
+	if(numParams < 2) {return false;}
+	any endCondition = GetNativeCell(1);
+	int winner = GetNativeCell(2);
+	if(endCondition > 0 && endCondition <= 4)
+	{
+		switch(endCondition)
+		{
+			case TE_TeamWin:
+			{
+				if(winner != 1 && winner != 2) {PrintToServer("[TCR] Debug - ForceEndRound provided winning team \"%d\" is invalid.", winner); return false;}
+				ForceWin(winner);
+			}
+			case TE_Deathmatch:
+			{
+				if(g_cvEnableDeathmatchMusic != null && g_cvEnableDeathmatchMusic.IntValue == 0)
+				{
+					//validate winner client
+					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
+					//set endCondition to None/Invalid
+					endConditionOverride = 0;
+					//potr is winner client
+					potrOverride = winner;
+					//set winnerOverride to invalid team 4
+					winnerOverride = 4;
+					//mp_forcewin 0 (no team)
+					ForceWin(0);
+					//send annihilation message
+					PrintToChatAll("\x07FF7700%N\x07FFFFFF has survived the carnage round!", winner);
+				}
+				else
+				{
+					//validate winner client
+					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
+					//set endCondition to Deathmatch
+					endConditionOverride = 2;
+					//set winnerOverride to provided winner
+					winnerOverride = winner;
+					//mp_forcewin 0 (no team)
+					ForceWin(0);
+				}
+			}
+			case TE_Time:
+			{
+				//validate winner team
+				if(winner < 0 || winner > 2) {PrintToServer("[TCR] Debug - ForceEndRound provided winning-by-time team \"%d\" is invalid.", winner); return false;}
+				//set endCondition to Time
+				endConditionOverride = 3;
+				//mp_forcewin (winner)
+				ForceWin(winner);
+			}
+			case TE_Solo:
+			{
+				if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided solo winner client \"%d\" is invalid.", winner); return false;}
+				//set endCondition to None/Invalid
+				endConditionOverride = 0;
+				//potr is winner client
+				potrOverride = winner;
+				//mp_forcewin 0 (no team)
+				ForceWin(0);
+				//customrole plugins are responsible for creating their own win text and notifications
+			}
+		}
+	}
+	else
+	{PrintToServer("[TCR] Debug - ForceEndRound provided endCondition \"%d\" is invalid.", endCondition); return false;}
+	if(forceWinActive)
+	{
+		g_cvDataForceWinActive.SetInt(1);
+		PrintToServer("[TCR] ForceEndRound called with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
+		return true;
+	}
+	PrintToServer("[TCR] Debug - ForceEndRound FAILED with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
+	return false;
+}
+
 public Action Timer_HudCustomRoles(Handle timer)
 {
+	//might as well check this here instead of creating another timer
+	int soloLastAlive = IsSurvivorSoloLastAlive();
+	if (soloLastAlive != 0)
+	{
+		SoloWin(soloLastAlive);
+	}
+	
 	for(int i = 1;i <= MaxClients; i++)
 	{
 		if(IsClientInGame(i) && (GetClientState(i) == 0 || GetClientState(i) == 5) && IsCustomRoleValid(GetClientCustomRoleIndex(i)))
 		{
 			int roleIndex = GetClientCustomRoleIndex(i);
-			if(roleIndex>0)
+			if(roleIndex>0 && !g_TempDisabledClients[i])
 			{
 				CustomRole role;
 				role = g_CustomRoles[roleIndex];
@@ -545,6 +946,20 @@ public Action Timer_HudCustomRoles(Handle timer)
 				//display ui elements
 				DisplayCustomRoleText(i, role);
 			}
+			
+			//check to make sure this custom role is actually being enforced
+			//this disables zombie traitors that have unintended custom roles still
+			int iRoleId = GetClientRoleID(i);
+			int underlyingRoleID;
+			switch(g_CustomRoles[roleIndex].underlyingRole)
+			{
+				case TR_Innocent: underlyingRoleID = 1;
+				case TR_Traitor: underlyingRoleID = 2;
+				case TR_Solo: underlyingRoleID = 1;
+			}
+			//if roleid != intended && roleid != annihilation (solo dead)
+			if(iRoleId != underlyingRoleID && iRoleId != 5)
+			{g_ClientRoles[i] = 0;}
 		}
 	}
 	return Plugin_Continue;
@@ -586,38 +1001,100 @@ public void InitClientCustomRoles()
 	{
 		if(IsClientInGame(i) && (GetClientState(i) == 0 || GetClientState(i) == 5) && IsCustomRoleValid(GetClientCustomRoleIndex(i)))
 		{
-			int roleIndex = GetClientCustomRoleIndex(i);
-			if(roleIndex>0)
-			{
-				CustomRole role;
-				role = g_CustomRoles[roleIndex];
-				
-				//display ui elements
-				DisplayCustomRoleText(i, role);
-				//discard unwanted abilities and gadgets
-				if(role.discardRoleAbilities)
-				{ResetClientAbilities(i); PrintToChatAll("ResetClientAbilities(%d)", i);}
-				if(role.discardRoleGadgets)
-				{ResetClientGadgets(i); PrintToChatAll("ResetClientGadgets(%d)", i);}
-				
-				if(role.keepClassAbility)
-				{GiveClassAbility(i);}
-				
-				//add desired abilities and gadgets
-				AddClientAbility(i, role.abilities[0]);
-				AddClientAbility(i, role.abilities[1]);
-				AddClientAbility(i, role.abilities[2]);
-				AddClientGadget(i, role.gadgets[0]);
-				AddClientGadget(i, role.gadgets[1]);
-				
-				//set playerModel
-				char currentModel[PLATFORM_MAX_PATH];
-				GetClientModel(i, currentModel, sizeof(currentModel));
-				if(!StrEqual(role.playerModel, "default", true) && !StrEqual(role.playerModel, currentModel, false) && IsModelPrecached(role.playerModel))
-				{
-					SetEntityModel(i, role.playerModel);
-				}
-			}
+			InitClientCustomRole(i);
+		}
+	}
+}
+
+public void InitClientCustomRole(int client)
+{
+	int roleIndex = GetClientCustomRoleIndex(client);
+	if(roleIndex>0 && !g_TempDisabledClients[client])
+	{
+		CustomRole role;
+		role = g_CustomRoles[roleIndex];
+		
+		if(role.underlyingRole == TR_Solo && GetClientRoleID(client) == TR_Annihilator)
+		{
+			SetClientRoleID(client, 1);
+		}
+		
+		//set class if desired
+		if(role.underlyingClass != TC_None)
+		{SetEntProp(client, Prop_Send, "m_iClass", role.underlyingClass);}
+		
+		//display ui elements
+		DisplayCustomRoleText(client, role);
+		//discard unwanted abilities and gadgets
+		if(role.discardRoleAbilities)
+		{ResetClientAbilities(client);}
+		if(role.discardRoleGadgets)
+		{ResetClientGadgets(client);}
+		
+		if(role.keepClassAbility)
+		{GiveClassAbility(client);}
+		
+		//add desired abilities and gadgets
+		AddClientAbility(client, role.abilities[0]);
+		AddClientAbility(client, role.abilities[1]);
+		AddClientAbility(client, role.abilities[2]);
+		AddClientGadget(client, role.gadgets[0]);
+		AddClientGadget(client, role.gadgets[1]);
+		
+		//set playerModel
+		char currentModel[PLATFORM_MAX_PATH];
+		GetClientModel(client, currentModel, sizeof(currentModel));
+		if(!role.useClassPlayerModels && !StrEqual(role.playerModel, "default", true) && !StrEqual(role.playerModel, currentModel, false) && IsModelPrecached(role.playerModel))
+		{
+			SetEntityModel(client, role.playerModel);
+		}
+		else if(role.useClassPlayerModels)
+		{
+			SetClassModel(client, roleIndex);
+		}
+	}
+}
+
+public void InitClientCustomRoleHealth(int client)
+{
+	CustomRole role;
+	role = g_CustomRoles[GetClientCustomRoleIndex(client)];
+		
+	//set maxHealth and Health to +Bonus;
+	int maxHealth = GetEntProp(client, Prop_Send, "m_iMaxHealth");
+	int health = GetEntProp(client, Prop_Send, "m_iHealth");
+	SetEntProp(client, Prop_Send, "m_iMaxHealth", maxHealth + role.maxHealthBonus);
+	SetEntProp(client, Prop_Send, "m_iHealth", health + role.maxHealthBonus);
+}
+
+public void SetClassModel(int client, int roleIndex)
+{
+	CustomRole role;
+	role = g_CustomRoles[roleIndex];
+	
+	switch(GetClientClass(client))
+	{
+		case TC_None:
+		{
+			SetEntityModel(client, role.playerModel);
+		}
+		case TC_Light:
+		{
+			char lightPath[PLATFORM_MAX_PATH];
+			Format(lightPath, sizeof(lightPath), "%s%s", role.playerModel, "_light.mdl");
+			SetEntityModel(client, lightPath);
+		}
+		case TC_Med:
+		{
+			char mediumPath[PLATFORM_MAX_PATH];
+			Format(mediumPath, sizeof(mediumPath), "%s%s", role.playerModel, "_medium.mdl");
+			SetEntityModel(client, mediumPath);
+		}
+		case TC_Heavy:
+		{
+			char heavyPath[PLATFORM_MAX_PATH];
+			Format(heavyPath, sizeof(heavyPath), "%s%s", role.playerModel, "_heavy.mdl");
+			SetEntityModel(client, heavyPath);
 		}
 	}
 }
@@ -733,7 +1210,7 @@ public void AssignCustomRoles()
 					}
 					default:
 					{
-						PrintToServer("[TAPI] Custom Role ID \"%s\" uses an invalid underlying role! This custom role will be ignored.", role.id);
+						PrintToServer("[TCR] Custom Role ID \"%s\" uses an invalid underlying role! This custom role will be ignored.", role.id);
 					}
 				}
 				//count this role in the overall total count
@@ -764,7 +1241,6 @@ public void AssignCustomRoles()
 	{
 		//select the amount of custom traitor roles we want
 		desiredRolesTraitor = GetRandomInt(minCustomTraitors, maxCustomTraitors);
-		
 	}
 	if(maxCustomInnocents > 0)
 	{
@@ -793,6 +1269,8 @@ public void AssignCustomRoles()
 		int assignedClient = AssignCustomRoleToRandomClientCandidate(selectedRoleIndex, countTraitors, validTraitors);
 		//panic and break if (assignedClient == -1)
 		if(assignedClient == -1) {break;}
+		//init the custom hp bonus of the custom role to this client
+		InitClientCustomRoleHealth(validTraitors[assignedClient]);
 		//remove the client (that we assigned the custom role to) from the array of valid clients
 		validTraitors[assignedClient] = 0;
 		//remove the now-selected role from the total weight, in preparation for if (desiredRoles > 1)
@@ -820,6 +1298,8 @@ public void AssignCustomRoles()
 		int assignedClient = AssignCustomRoleToRandomClientCandidate(selectedRoleIndex, countInnocents, validInnocents);
 		//panic and break if (assignedClient == -1)
 		if(assignedClient == -1) {break;}
+		//init the custom hp bonus of the custom role to this client
+		InitClientCustomRoleHealth(validInnocents[assignedClient]);
 		//remove the client (that we assigned the custom role to) from the array of valid clients
 		validInnocents[assignedClient] = 0;
 		//remove the now-selected role from the total weight, in preparation for if (desiredRoles > 1)
@@ -847,6 +1327,8 @@ public void AssignCustomRoles()
 		int assignedClient = AssignCustomRoleToRandomClientCandidate(selectedRoleIndex, countInnocents, validInnocents);
 		//panic and break if (assignedClient == -1)
 		if(assignedClient == -1) {break;}
+		//init the custom hp bonus of the custom role to this client
+		InitClientCustomRoleHealth(validInnocents[assignedClient]);
 		//remove the client (that we assigned the custom role to) from the array of valid clients
 		validInnocents[assignedClient] = 0;
 		//remove the now-selected role from the total weight, in preparation for if (desiredRoles > 1)
@@ -886,9 +1368,13 @@ public int SelectRandomWeightedRoleCandidate(int totalWeight, int candidateCount
 
 public int AssignCustomRoleToRandomClientCandidate(int customRoleIndex, int candidateCount, int[] candidates)
 {
-	if(customRoleIndex <= 0 || candidateCount == 0)
+	if(customRoleIndex <= 0)
 	{
-		PrintToServer("[TAPI] Debug - AssignCustomRoleToRandomClientCandidate, either (customRoleIndex %d) or (candidateCount %d) is invalid.", customRoleIndex, candidateCount);
+		return -1;
+	}
+	if(candidateCount == 0)
+	{
+		//PrintToServer("[TCR] No valid candidates for Custom Role Index %d.", customRoleIndex);
 		return -1;
 	}
 	
@@ -913,6 +1399,23 @@ public int AssignCustomRoleToRandomClientCandidate(int customRoleIndex, int cand
 	int randomClientValidCandidate = GetRandomInt(0, validCount-1);
 	int randomClient = validCandidates[randomClientValidCandidate];
 	
+	//if randomClient is recentlyassigned and isnt the only one, roll again
+	if(validCount > 1 && g_RecentlySelectedSoloClients[randomClient] && g_CustomRoles[customRoleIndex].underlyingRole == TR_Solo)
+	{
+		g_RecentlySelectedSoloClients[randomClient] = false;
+		randomClientValidCandidate = GetRandomInt(0, validCount-1);
+		randomClient = validCandidates[randomClientValidCandidate];
+		
+		//if randomClient is once again a recentlyassigned one, just reset the entire array
+		if(g_RecentlySelectedSoloClients[randomClient])
+		{
+			for(int i = 1; i <= MaxClients; i++)
+			{
+				g_RecentlySelectedSoloClients[i] = false;
+			}
+		}
+	}
+	
 	//find the candidate index that holds the client we are about to return
 	int finalClientCandidateIndex = 0;
 	for(int c = 0; c < candidateCount; c++)
@@ -926,7 +1429,360 @@ public int AssignCustomRoleToRandomClientCandidate(int customRoleIndex, int cand
 	
 	//assign the customrole to the randomly selected index
 	SetClientCustomRole(randomClient, customRoleIndex);
+	//set this client as recentlyassigned if they are solo
+	if(g_CustomRoles[customRoleIndex].underlyingRole == TR_Solo)
+	{g_RecentlySelectedSoloClients[randomClient] = true;}
+	//fix the bug where innocents are glowing for traitors for whatever reason
+	if(g_CustomRoles[customRoleIndex].underlyingRole != TR_Traitor)
+	{SetEntProp(randomClient, Prop_Send, "m_bGlowEnabled", 0, 1, 2);}
 	
 	//return the candidate index of candidates[] that we are assigning a custom role to the client index of
 	return finalClientCandidateIndex;
+}
+
+//team 0 = no team
+//team 1 = innocent
+//team 2 = traitor
+public void ForceWin(int team)
+{
+	//if team is invalid, stop here and report to server console.
+	if(team < 0 || team > 2) {PrintToServer("[TCR] Debug - ForceWin Invalid Team Input \"%d\"!", team); return;}
+	
+	//get original flags
+	int originalFlags = GetCommandFlags("mp_forcewin");
+	PrintToServer("[TCR] Debug - ForceWin originalFlags: %d", originalFlags);
+	
+	//create modified flags
+	int newFlags = originalFlags & ~FCVAR_CHEAT;
+	PrintToServer("[TCR] Debug - ForceWin newFlags: %d", newFlags);
+	
+	//apply modified flags and call mp_forcewin
+	SetCommandFlags("mp_forcewin", newFlags);
+	ServerCommand("mp_forcewin %d", team);
+	
+	//set this bool so we know to hook all overrides
+	forceWinActive = true;
+	g_cvDataForceWinActive.SetInt(1);
+	
+	//restore flags to original
+	SetCommandFlags("mp_forcewin", originalFlags);
+	return;
+}
+
+public void TempDisableRatingPunishments()
+{
+	ServerCommand("t_rating_kill_teammate_innocents 0");
+	ServerCommand("t_rating_kill_teammate_traitors 0");
+}
+
+public void ResetAllKarma()
+{
+	//rewards
+	ServerCommand("t_karma_bear_trap_release 10");
+	ServerCommand("t_karma_bomb_defuse 10");
+	ServerCommand("t_karma_kill_unconfirmed_teammate 10");
+	ServerCommand("t_karma_damage_confirmed_enemy 10");
+	ServerCommand("t_karma_detective_reveal 10");
+	ServerCommand("t_karma_detective_scan 10");
+	ServerCommand("t_karma_healing_doctor 10");
+	ServerCommand("t_karma_healing_doctor_threshold 10");
+	ServerCommand("t_karma_innocent_reveal 10");
+	ServerCommand("t_karma_kill_confirmed_enemy 10");
+	ServerCommand("t_karma_power_supply_turn_on 10");
+	ServerCommand("t_karma_resuscitate_player 10");
+	
+	//punishments
+	ServerCommand("t_karma_damage_confirmed_teammate 10");
+	ServerCommand("t_karma_kill_confirmed_teammate  10");
+	ServerCommand("t_karma_kill_unconfirmed_teammate  10");
+	
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (!IsClientInGame(client))
+			continue;
+		
+		SetClientKarma(client, 100);
+	}
+}
+
+int FindClosestRagdollToEntity(int ent)
+{
+	float maxDistance = 50.0;
+	float entPos[3];
+	GetEntPropVector(ent, Prop_Send, "m_vecOrigin", entPos);
+
+	int closestRagdoll = INVALID_ENT_REFERENCE;
+	float closestDistance = maxDistance;
+
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (!IsClientInGame(client))
+			continue;
+
+		if (IsPlayerAlive(client))
+			continue;
+
+		int ragdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
+
+		if (ragdoll <= MaxClients || !IsValidEntity(ragdoll))
+			continue;
+
+		float ragPos[3];
+		GetEntPropVector(ragdoll, Prop_Send, "m_vecOrigin", ragPos);
+
+		float distance = GetVectorDistance(entPos, ragPos);
+
+		if (distance < closestDistance)
+		{
+			closestDistance = distance;
+			closestRagdoll = ragdoll;
+		}
+	}
+
+	return closestRagdoll;
+}
+
+public Action Timer_HandleClientDeath(Handle timer, any client)
+{
+	g_TempDisabledClients[GetClientOfUserId(client)] = true;
+	HandleClientRagdoll(GetClientOfUserId(client));
+	CheckForLastInnocent();
+	return Plugin_Stop;
+}
+
+void HandleClientRagdoll(int client)
+{
+	//check valid client
+	if (client <= 0 || client > MaxClients || !IsClientInGame(client)) {return;}
+	//get client ragdoll
+	int ragdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
+	if (ragdoll <= MaxClients || !IsValidEntity(ragdoll)) {return;}
+	
+	
+	//if client has custom role
+	int customRoleIndex = GetClientCustomRoleIndex(client);
+	if(customRoleIndex < 1) {return;}
+	
+	//get customrole
+	CustomRole role;
+	role = g_CustomRoles[customRoleIndex];
+	
+	//if custom role is solo
+	if(role.underlyingRole == TR_Solo)
+	{
+		//make ragdoll role redacted
+		SetEntProp(ragdoll, Prop_Send, "m_nRole", 6);
+		//make client orange
+		SetClientRoleID(client, TR_Annihilator);
+	}
+}
+
+void HandlePoleEntity(int pole)
+{
+	//find the closest ragdoll to the pole
+	int ragdoll = FindClosestRagdollToEntity(pole);
+	if (ragdoll <= MaxClients || !IsValidEntity(ragdoll)) {return;}
+	//get the owner client of the ragdoll
+	int client = GetEntPropEnt(ragdoll, Prop_Send, "m_hOwnerEntity");
+	
+	//if custom role is valid
+	int customRoleIndex = GetClientCustomRoleIndex(client);
+	if(customRoleIndex < 1) {return;}
+	
+	//get customrole
+	CustomRole role;
+	role = g_CustomRoles[customRoleIndex];
+	
+	//if custom role has a poleModel
+	if(IsModelPrecached(role.poleModel))
+	//set the poleModel
+	{SetEntityModel(pole, role.poleModel);}
+}
+
+public void CheckForLastInnocent()
+{
+	int innocentCount = 0;
+	// count the alive innocents, not including solos
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i)) {continue;}
+		
+		any role = GetClientRole(i);
+		if(role == TR_Innocent || role == TR_Detective || role == TR_Doctor)
+		{
+			innocentCount++;
+		}
+	}
+	
+	if(innocentCount == 1)
+	{
+		Event event = CreateEvent("last_innocent", true);
+		event.Fire();
+		return;
+	}
+}
+
+// returns true if any solo role with winIfLastAlive is alive
+public int IsSurvivorSoloAlive()
+{
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i)) {continue;}
+		
+		int cr = GetClientCustomRoleIndex(i);
+		if(IsCustomRoleValid(cr) && GetClientRole(i) == TR_Solo)
+		{
+			if(g_CustomRoles[cr].winIfLastAlive)
+			{
+				return i;
+			}
+		}
+	}
+	return 0;
+}
+
+// returns a client index if a solo role with winIfLastAlive is the last alive
+public int IsSurvivorSoloLastAlive()
+{
+	int playerCount = 0;
+	int survivorAlive = 0;
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i)) {continue;}
+		if(GetClientState(i) != 0 && GetClientState(i) != 5) {continue;}
+		
+		playerCount++;
+		
+		int cr = GetClientCustomRoleIndex(i);
+		if(IsCustomRoleValid(cr) && GetClientRole(i) == TR_Solo)
+		{
+			if(g_CustomRoles[cr].winIfLastAlive)
+			{
+				survivorAlive = i;
+			}
+		}
+	}
+	if(playerCount == 1 && survivorAlive != 0)
+	{return survivorAlive;}
+	
+	return 0;
+}
+
+public void SoloWin(int client)
+{
+	forceWinActive = false;
+	int customRoleIndex = GetClientCustomRoleIndex(client);
+	Call_StartForward(g_SoloWinForward);
+	Call_PushCell(client);
+	Call_PushCell(customRoleIndex);
+	Call_Finish();
+	ForceEndRound(TE_Solo, client);
+}
+
+public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
+{
+	int winner = DHookGetParam(hParams, 1);
+	int reason = DHookGetParam(hParams, 2);
+	int arg3 = DHookGetParam(hParams, 3);
+	int arg4 = DHookGetParam(hParams, 4);
+	int arg5 = DHookGetParam(hParams, 5);
+	int arg6 = DHookGetParam(hParams, 6);
+
+	PrintToServer("[TCR] EndRound caught: this=%x winner=%d reason=%d, arg3=%d arg4=%d arg5=%d arg6=%d",
+		pThis, winner, reason, arg3, arg4, arg5, arg6);
+	
+	//start endround logic checks
+	int soloLastAlive = IsSurvivorSoloLastAlive();
+	int soloAlive = IsSurvivorSoloAlive();
+	
+	if(forceWinActive)
+	{
+		//this gets reset in the event call later
+		//forceWinActive = false;
+		//g_cvDataForceWinActive.SetInt(0);
+		
+		if(endConditionOverride != -1)
+		{
+			DHookSetParam(hParams, 2, endConditionOverride);
+			reason = endConditionOverride;
+			endConditionOverride = -1;
+		}
+		if(winnerOverride != -1)
+		{
+			DHookSetParam(hParams, 1, winnerOverride);
+			winner = winnerOverride;
+			winnerOverride = -1;
+		}
+		return MRES_ChangedHandled;
+	}
+	else if (soloLastAlive != 0 && reason != 3) //if soloAlive and reason is NOT time
+	{
+		SoloWin(soloLastAlive);
+		return MRES_Supercede;
+	}
+	else if(soloAlive != 0 && reason == 1) //if soloAlive and reason is teamwin
+	{
+		PrintToServer("[TCR] Calling Global Forward \"OnSoloStoppedRoundEnd()\"...");
+		Call_StartForward(g_SoloStoppedRoundEndForward);
+		Call_PushCell(soloAlive);
+		Call_Finish();
+		
+		int innocentsAlive = 0;
+		for(int i = 1;i <= MaxClients; i++)
+		{
+			if(!IsClientInGame(i)) {continue;}
+			
+			any role = GetClientRole(i);
+			// find if there is an alive innocent type and count them
+			if(role == TR_Innocent || role == TR_Detective || role == TR_Doctor)
+			{
+				innocentsAlive++;
+			}
+		}
+		
+		if(innocentsAlive == 1)
+		{
+			Event newEvent = CreateEvent("last_innocent", true);
+			newEvent.Fire();
+		}
+		
+		return MRES_Supercede;
+	}
+	
+	return MRES_Ignored;
+}
+
+void AddFolderToDownloadsTable(const char[] path)
+{
+    DirectoryListing dir = OpenDirectory(path);
+
+    if (dir == null)
+    {
+        PrintToServer("[TCR] Failed to open specified directory: %s", path);
+        return;
+    }
+
+    char entry[PLATFORM_MAX_PATH];
+    FileType type;
+
+    while (dir.GetNext(entry, sizeof(entry), type))
+    {
+        // skip . and ..
+        if (entry[0] == '.')
+            continue;
+
+        char fullPath[PLATFORM_MAX_PATH];
+        FormatEx(fullPath, sizeof(fullPath), "%s/%s", path, entry);
+
+        if (type == FileType_Directory)
+        {
+            AddFolderToDownloadsTable(fullPath); // recursion
+        }
+        else if (type == FileType_File)
+        {
+            AddFileToDownloadsTable(fullPath);
+        }
+    }
+
+    delete dir;
 }
