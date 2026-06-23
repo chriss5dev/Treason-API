@@ -5,8 +5,8 @@
 #include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.3"
-#define TAPI_VERSION_INT 010300
+#define TAPI_VERSION "1.3.1"
+#define TAPI_VERSION_INT 010301
  
 public Plugin myinfo =
 {
@@ -74,10 +74,10 @@ public void OnClientDisconnect(int client)
 
 public void SDKSetup()
 {
-    Handle hGameConf = LoadGameConfigFile("game.treason");
+    Handle hGameConf = LoadGameConfigFile("tapi");
     if (hGameConf == null)
     {
-        SetFailState("Failed to load gamedata file 'game.treason.txt'");
+        SetFailState("Failed to load gamedata file 'tapi.txt'");
     }
 
 	g_KarmaOffset = GameConfGetOffset(hGameConf, "PlayerKarma");
