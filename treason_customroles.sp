@@ -6,14 +6,14 @@
 #include <treason>
 #include <chriss5math>
 #define MAXCUSTOMROLES 16
-#define REQUIRED_TAPI_VERSION 010300
+#define REQUIRED_TAPI_VERSION 010301
  
 public Plugin myinfo =
 {
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Included in the Treason API.",
-	version = "0.9",
+	version = "0.91",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -162,10 +162,10 @@ public void CheckNewPropPhysics(any ref)
 
 public void SDKSetup()
 {
-	Handle hGameConf = LoadGameConfigFile("game.treason");
+	Handle hGameConf = LoadGameConfigFile("tapi");
 	if (hGameConf == null)
 	{
-		SetFailState("Failed to load gamedata file 'game.treason.txt'");
+		SetFailState("Failed to load gamedata file 'tapi.txt'");
 	}
 	
 	g_hEndRound = DHookCreateFromConf(hGameConf, "EndRound");
