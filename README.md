@@ -1,6 +1,4 @@
 # Treason API for SourceMod
-### by chriss5
-https://forums.alliedmods.net/showthread.php?p=2844403
 
 *Note that Klaus Veen's Treason is NOT fully supported by SourceMod as of 6/22/2026, and so has no official extension or wrapper.
 This is my way of centralizing all of my KVT plugins' most important functions (fetching data from KVT) to make my life easier.*
