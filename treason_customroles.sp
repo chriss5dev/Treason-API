@@ -13,7 +13,7 @@ public Plugin myinfo =
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Included in the Treason API.",
-	version = "0.91",
+	version = "0.97",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -88,7 +88,7 @@ public void OnMapStart()
 	AddFolderToDownloadsTable("materials/models/props_cluesystem/custom");
 }
 
-public void OnClientPostAdminCheck(int client)
+public Action OnClientPreAdminCheck(int client)
 {
 	char action1Key[16];
 	g_cvAction1Key.GetString(action1Key, sizeof(action1Key));
@@ -98,6 +98,8 @@ public void OnClientPostAdminCheck(int client)
 	{
 		QueryClientConVar(client, "cl_downloadfilter", OnDownloadFilterChecked);
 	}
+	
+	return Plugin_Continue;
 }
 
 public void OnDownloadFilterChecked
@@ -1044,13 +1046,16 @@ public void InitClientCustomRole(int client)
 		//set playerModel
 		char currentModel[PLATFORM_MAX_PATH];
 		GetClientModel(client, currentModel, sizeof(currentModel));
-		if(!role.useClassPlayerModels && !StrEqual(role.playerModel, "default", true) && !StrEqual(role.playerModel, currentModel, false) && IsModelPrecached(role.playerModel))
+		if(!StrEqual(role.playerModel, "default", true) && !StrEqual(role.playerModel, currentModel, false))
 		{
-			SetEntityModel(client, role.playerModel);
-		}
-		else if(role.useClassPlayerModels)
-		{
-			SetClassModel(client, roleIndex);
+			if(!role.useClassPlayerModels && IsModelPrecached(role.playerModel))
+			{
+				SetEntityModel(client, role.playerModel);
+			}
+			else if(role.useClassPlayerModels)
+			{
+				SetClassModel(client, roleIndex);
+			}
 		}
 	}
 }
@@ -1547,6 +1552,7 @@ public Action Timer_HandleClientDeath(Handle timer, any client)
 	g_TempDisabledClients[GetClientOfUserId(client)] = true;
 	HandleClientRagdoll(GetClientOfUserId(client));
 	CheckForLastInnocent();
+	CheckForUnnaturalWin();
 	return Plugin_Stop;
 }
 
@@ -1720,12 +1726,15 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 		SoloWin(soloLastAlive);
 		return MRES_Supercede;
 	}
-	else if(soloAlive != 0 && reason == 1) //if soloAlive and reason is teamwin
+	else if(soloAlive != 0 && reason == 1) //if soloAlive and reason is teamwin and theres no forcewin
 	{
-		PrintToServer("[TCR] Calling Global Forward \"OnSoloStoppedRoundEnd()\"...");
-		Call_StartForward(g_SoloStoppedRoundEndForward);
-		Call_PushCell(soloAlive);
-		Call_Finish();
+		if(g_cvDataForceWinActive.IntValue == 0)
+		{
+			PrintToServer("[TCR] Calling Global Forward \"OnSoloStoppedRoundEnd()\"...");
+			Call_StartForward(g_SoloStoppedRoundEndForward);
+			Call_PushCell(soloAlive);
+			Call_Finish();
+		}
 		
 		int innocentsAlive = 0;
 		for(int i = 1;i <= MaxClients; i++)
@@ -1785,4 +1794,40 @@ void AddFolderToDownloadsTable(const char[] path)
     }
 
     delete dir;
+}
+
+void CheckForUnnaturalWin()
+{
+	int soloAlive = IsSurvivorSoloAlive();
+	int ainnocentsAlive = 0;
+	int atraitorsAlive = 0;
+	bool annihilation = false;
+	for(int i = 1;i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i)) {continue;}
+		
+		any role = GetClientRole(i);
+		// find if there is an alive innocent type and count them
+		if(role == TR_Innocent || role == TR_Detective || role == TR_Doctor)
+		{
+			ainnocentsAlive++;
+		}
+		if(role == TR_Traitor)
+		{
+			atraitorsAlive++;
+		}
+		if(role == TR_Annihilator)
+		{
+			annihilation = true;
+		}
+	}
+	
+	if(!annihilation && soloAlive == 0 && ainnocentsAlive == 0)
+	{
+		ForceEndRound(TE_TeamWin, 2);
+	}
+	else if(!annihilation && soloAlive == 0 && atraitorsAlive == 0)
+	{
+		ForceEndRound(TE_TeamWin, 1);
+	}
 }
