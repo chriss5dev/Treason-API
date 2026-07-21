@@ -1,5 +1,5 @@
 # Treason API for SourceMod
-## by chriss5
+### by chriss5
 https://forums.alliedmods.net/showthread.php?p=2844403
 
 *Note that Klaus Veen's Treason is NOT fully supported by SourceMod as of 6/22/2026, and so has no official extension or wrapper.
@@ -14,3 +14,8 @@ The third (more recent) goal of this project is to expand the modding capabiliti
 Hopefully, this API and its companion plugins will make Treason modding more accessible and open up new possibilities to those who create SourceMod plugins for Treason.
 
 This project was originally made for my own personal use, but I hope people find use in it!
+
+# Custom Roles
+## Examples
+- [The Lone Wolf](https://github.com/chriss5dev/TCR-LoneWolf)
+- [The Jester](https://github.com/chriss5dev/TCR-Jester)
