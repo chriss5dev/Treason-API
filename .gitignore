@@ -2,8 +2,3 @@
 compile.dat
 api_thread.txt
 /package
-/include
-!/include/chriss5math.inc
-!/include/treason.inc
-!/include/treason_customroles.inc
-!/include/treason_textpositions.inc
