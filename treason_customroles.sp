@@ -14,7 +14,7 @@ public Plugin myinfo =
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
-	version = "1.0",
+	version = "1.01",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -264,6 +264,7 @@ public void RegisterCommands()
 	RegAdminCmd("sm_listcr", CmdListCustomRoles, ADMFLAG_ROOT);
 	
 	RegAdminCmd("tcr_get", CmdGetCustomRole, ADMFLAG_ROOT);
+	RegAdminCmd("tcr_set", CmdSetCustomRole, ADMFLAG_ROOT);
 	RegAdminCmd("tcr_list", CmdListCustomRoles, ADMFLAG_ROOT);
 }
 
