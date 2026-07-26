@@ -5,8 +5,8 @@
 #include <dhooks>
 #include <treason>
 
-#define TAPI_VERSION "1.3.1"
-#define TAPI_VERSION_INT 010301
+#define TAPI_VERSION "1.3.2"
+#define TAPI_VERSION_INT 010302
  
 public Plugin myinfo =
 {
@@ -178,6 +178,8 @@ public void CreateNatives()
 	CreateNative("SetClientRoleID", N_SetClientRoleID);
 	CreateNative("GetClientRole", N_GetClientRole);
 	CreateNative("SetClientRole", N_SetClientRole);
+	CreateNative("GetClientRoleNameVanilla", N_GetClientRoleNameVanilla);
+	CreateNative("GetClientRoleIDName", N_GetClientRoleIDName);
 	//special innocents
 	CreateNative("GetDetectiveIndex", N_GetDetectiveIndex);
 	CreateNative("GetDoctorIndex", N_GetDoctorIndex);
@@ -727,23 +729,6 @@ public any N_GetClientRole(Handle plugin, int numParams)
 			int role = GetEntData(client, g_RoleOffset, 1);
 			return role;
 		}
-		
-		/* // Scan client for Ghost Radar
-		for (int i = 0; i < 3; i++)
-		{
-			treasonAbility ability = GetClientAbility(client, i);
-			
-			if(ability == TAbility_GhostRadar)
-			{return TR_Ghost;}
-		}
-		// Scan client for Ghost Transform
-		for (int i = 0; i < 3; i++)
-		{
-			treasonAbility ability = GetClientAbility(client, i);
-			
-			if(ability == TAbility_GhostTransform)
-			{return TR_None;}
-		} */
 	}
 	return TA_None;
 }
@@ -760,6 +745,57 @@ public any N_SetClientRole(Handle plugin, int numParams)
 		SetEntData(client, g_RoleOffset, role);
 		SDKCall(g_hUpdateRole, client, 0);
 		if(role == 5) {SetEntityModel(client, "models/player/mafia_don.mdl");}
+		return true;
+	}
+	return false;
+}
+
+public any N_GetClientRoleIDName(Handle plugin, int numParams)
+{
+	int client = GetNativeCell(1);
+	char name[32];
+	int size = GetNativeCell(3);
+	if(IsClientInGame(client))
+	{
+		int role = GetClientRoleID(client);
+			switch (role)
+			{
+				case TR_None: name = "Unassigned";
+				case TR_Innocent: name = "Innocent";
+				case TR_Traitor: name = "Traitor";
+				case TR_Detective: name = "Detective";
+				case TR_Doctor: name = "Doctor";
+				case TR_Annihilator: name = "Annihilator";
+				default: return false;
+			}
+		
+		SetNativeString(2, name, size);
+		return true;
+	}
+	return false;
+}
+
+public any N_GetClientRoleNameVanilla(Handle plugin, int numParams)
+{
+	int client = GetNativeCell(1);
+	char name[32];
+	int size = GetNativeCell(3);
+	if(IsClientInGame(client))
+	{
+		int role = GetClientRole(client);
+		switch (role)
+		{
+			case TR_None: name = "Unassigned";
+			case TR_Innocent: name = "Innocent";
+			case TR_Traitor: name = "Traitor";
+			case TR_Detective: name = "Detective";
+			case TR_Doctor: name = "Doctor";
+			case TR_Annihilator: name = "Annihilator";
+			case TR_Ghost: name = "Ghost";
+			case TR_Solo: name = "Innocent";
+			default: name = "INVALID_ROLE";
+		}
+		SetNativeString(2, name, size);
 		return true;
 	}
 	return false;

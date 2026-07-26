@@ -13,7 +13,7 @@ public Plugin myinfo =
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Included in the Treason API.",
-	version = "0.97",
+	version = "0.98",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -115,12 +115,12 @@ public void OnDownloadFilterChecked
 	
 	if (result != ConVarQuery_Okay)
 	{
-		KickClient(client, "Could not verify your multiplayer download settings.");
+		KickClient(client, "Could not verify your multiplayer download settings");
 		return;
 	}
 	if (!StrEqual(cvarValue, "all", false))
 	{
-		KickClient(client, "You must allow all custom downloads to play on this server. You can change this under the \"Multiplayer\" settings tab.");
+		KickClient(client, "You must allow all custom downloads to play on this server. You can change this under the \"Multiplayer\" settings tab");
 		return;
 	}
 }
@@ -221,6 +221,7 @@ public void CreateConVars()
 public void CreateNatives()
 {
 	CreateNative("IsClientSoloCustomRole", N_IsClientSoloCustomRole);
+	CreateNative("GetClientRoleName", N_GetClientRoleName);
 	CreateNative("ClearCustomRole", N_ClearCustomRole);
 	CreateNative("GetCustomRoleIndex", N_GetCustomRoleIndex);
 	CreateNative("GetCustomRoleID", N_GetCustomRoleID);
@@ -448,7 +449,9 @@ public void E_PlayerChangeClass(Event event, const char[] name, bool dontBroadca
 //COMMANDS
 public Action CmdAction1(int client, int args)
 {
-	//make forward here
+	//add extra tapi_action1 logic necessary for api usage.
+	//as of right now, thats nothing.
+	//usage of action1: RegConsoleCmd("tapi_action1", DesiredFunctionNameHere);
 	return Plugin_Handled;
 }
 
@@ -526,6 +529,42 @@ public any N_IsClientSoloCustomRole(Handle plugin, int numParams)
 		
 		if(role.underlyingRole == TR_Solo)
 		{return true;}
+	}
+	return false;
+}
+
+public any N_GetClientRoleName(Handle plugin, int numParams)
+{
+	int client = GetNativeCell(1);
+	bool includeCustomRoles = GetNativeCell(2);
+	char name[32];
+	int size = GetNativeCell(4);
+	if(IsClientInGame(client))
+	{
+		int cr = GetClientCustomRoleIndex(client);
+		int role = GetClientRole(client);
+		if(includeCustomRoles && IsCustomRoleValid(cr))
+		{
+			name = g_CustomRoles[cr].displayName;
+		}
+		else
+		{
+			switch (role)
+			{
+				case TR_None: name = "Unassigned";
+				case TR_Innocent: name = "Innocent";
+				case TR_Traitor: name = "Traitor";
+				case TR_Detective: name = "Detective";
+				case TR_Doctor: name = "Doctor";
+				case TR_Annihilator: name = "Annihilator";
+				case TR_Ghost: name = "Ghost";
+				case TR_Solo: name = "Independent";
+				default: return false;
+			}
+		}
+		
+		SetNativeString(3, name, size);
+		return true;
 	}
 	return false;
 }
