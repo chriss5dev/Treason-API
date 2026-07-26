@@ -535,7 +535,6 @@ native int RegisterCustomRole
 (
 	int PROTOTYPE_VERSION, // THIS IS PROTOTYPE VERSION 2.
 	char[] id,
-	int test,
 	char[] displayName,
 	
 	any underlyingRole,
