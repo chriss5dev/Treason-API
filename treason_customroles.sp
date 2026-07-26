@@ -7,13 +7,14 @@
 #include <chriss5math>
 #define MAXCUSTOMROLES 16
 #define REQUIRED_TAPI_VERSION 010301
- 
+#define PROTOTYPE_VERSION_LATEST 1
+
 public Plugin myinfo =
 {
 	name = "Treason Custom Roles",
 	author = "chriss5",
-	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Included in the Treason API.",
-	version = "0.98",
+	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
+	version = "1.0",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -23,6 +24,7 @@ GlobalForward g_SoloWinForward;
 GlobalForward g_ClearRolesForward;
 GlobalForward g_AssignedCustomRoleForward;
 
+ConVar g_cvDebug;
 ConVar g_cvMinCustomRolesTraitor;
 ConVar g_cvMinCustomRolesInnocent;
 ConVar g_cvMinCustomRolesSolo;
@@ -159,7 +161,7 @@ public void CheckNewPropPhysics(any ref)
 	
 	HandlePoleEntity(entity);
 
-	PrintToServer("[TCR] Debug - Replaced pole model on entity %d", entity);
+	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - Replaced pole model on entity %d", entity);}
 }
 
 public void SDKSetup()
@@ -205,6 +207,7 @@ public void CreateForwards()
 
 public void CreateConVars()
 {
+	g_cvDebug = CreateConVar("tapi_cr_debug", "1", "Displays debugging messages in the server console when set to 1. Primarily intended for custom role development.");
 	g_cvEnableDeathmatchMusic = FindConVar("tapi_deathmatchmusic");
 	
 	g_cvDataForceWinActive = CreateConVar("tapi_data_forcewinactive", "0", "Provides the sate of forceWinActive to other plugins.", FCVAR_SPONLY);
@@ -581,43 +584,77 @@ public void N_ClearCustomRole(Handle plugin, int numParams)
 public int N_RegisterCustomRole(Handle plugin, int numParams)
 {
 	if(numParams<24)
-	{return -1;}
+	{PrintToServer("[TCR] Error - N_RegisterCustomRole failed due to an insufficient amount of paramaters!"); return -1;}
+	
+	//define variables
 	char id[32];
-	if(GetNativeString(1, id, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 1!"); return -1;}
 	char displayName[32];
-	if(GetNativeString(2, displayName, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 2!"); return -1;}
-	
-	any underlyingRole = GetNativeCell(3);
-	any underlyingClass = GetNativeCell(4);
-	int prevalence = GetNativeCell(5);
-	int weight = GetNativeCell(6);
-	int minPlayers = GetNativeCell(7);
-	int maxPlayers = GetNativeCell(8);
-	int minTraitors = GetNativeCell(9);
-	int minInnocents = GetNativeCell(10);
-	bool requireDetective = GetNativeCell(11);
-	bool requireDoctor = GetNativeCell(12);
-	
-	int maxHealthBonus = GetNativeCell(13);
-	
-	bool displayAboveText = GetNativeCell(14);
+	any underlyingRole;
+	any underlyingClass;
+	int prevalence;
+	int weight;
+	int minPlayers;
+	int maxPlayers;
+	int minTraitors;
+	int minInnocents;
+	bool requireDetective;
+	bool requireDoctor;
+	int maxHealthBonus;
+	bool displayAboveText;
 	int roleColor[3];
-	if(GetNativeArray(15, roleColor, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 15!"); return -1;}
-	int roleTextBrightness = GetNativeCell(16);
+	int roleTextBrightness;
 	char playerModel[PLATFORM_MAX_PATH];
-	if(GetNativeString(17, playerModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 17!"); return -1;}
-	bool useClassPlayerModels = GetNativeCell(18);
+	bool useClassPlayerModels;
 	char poleModel[PLATFORM_MAX_PATH];
-	if(GetNativeString(19, poleModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 19!"); return -1;}
-	
-	bool discardRoleAbilities = GetNativeCell(20);
-	bool discardRoleGadgets = GetNativeCell(21);
-	bool keepClassAbility = GetNativeCell(22);
+	bool discardRoleAbilities;
+	bool discardRoleGadgets;
+	bool keepClassAbility;
 	any abilities[3];
-	if(GetNativeArray(23, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 23!"); return -1;}
 	any gadgets[2];
-	if(GetNativeArray(24, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TCR] Debug - N_RegisterCustomRole failed at parameter 24!"); return -1;}
-	bool winIfLastAlive = GetNativeCell(25);
+	bool winIfLastAlive;
+	
+	//start to parse native
+	//get prototype version
+	int ptVersion = GetNativeCell(1);
+	if(GetNativeString(2, id, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 2!"); return -1;}
+	
+	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - (\"%s\") N_RegisterCustomRole detected prototype version \"%d\".", id, ptVersion);}
+	switch(ptVersion)
+	{
+		case 1:
+		{
+			// PROTOTYPE VERSION 1
+			if(GetNativeString(3, displayName, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 3!"); return -1;}
+			underlyingRole = GetNativeCell(4);
+			underlyingClass = GetNativeCell(5);
+			prevalence = GetNativeCell(6);
+			weight = GetNativeCell(7);
+			minPlayers = GetNativeCell(8);
+			maxPlayers = GetNativeCell(9);
+			minTraitors = GetNativeCell(10);
+			minInnocents = GetNativeCell(11);
+			requireDetective = GetNativeCell(12);
+			requireDoctor = GetNativeCell(13);
+			maxHealthBonus = GetNativeCell(14);
+			displayAboveText = GetNativeCell(15);
+			if(GetNativeArray(16, roleColor, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 16!"); return -1;}
+			roleTextBrightness = GetNativeCell(17);
+			if(GetNativeString(18, playerModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 18!"); return -1;}
+			useClassPlayerModels = GetNativeCell(19);
+			if(GetNativeString(20, poleModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 20!"); return -1;}
+			discardRoleAbilities = GetNativeCell(21);
+			discardRoleGadgets = GetNativeCell(22);
+			keepClassAbility = GetNativeCell(23);
+			if(GetNativeArray(24, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 24!"); return -1;}
+			if(GetNativeArray(25, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 25!"); return -1;}
+			winIfLastAlive = GetNativeCell(26);
+		}
+		default:
+		{
+			PrintToServer("[TCR] Error - N_RegisterCustomRole failed due to invalid prototype version \"%d\"!", ptVersion);
+			return -1;
+		}
+	}
 	
 	return RegCustomRole
 	(
@@ -693,7 +730,7 @@ public int RegCustomRole
 	{
 		if(StrEqual(g_CustomRoles[i].id, id, false))
 		{
-			PrintToServer("[TCR] Debug - Duplicate custom role ID \"%s\".", id);
+			PrintToServer("[TCR] Error - Duplicate custom role ID \"%s\".", id);
 			return -1;
 		}
 	}
@@ -899,7 +936,7 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 		{
 			case TE_TeamWin:
 			{
-				if(winner != 1 && winner != 2) {PrintToServer("[TCR] Debug - ForceEndRound provided winning team \"%d\" is invalid.", winner); return false;}
+				if(winner != 1 && winner != 2) {PrintToServer("[TCR] Error - ForceEndRound provided winning team \"%d\" is invalid.", winner); return false;}
 				ForceWin(winner);
 			}
 			case TE_Deathmatch:
@@ -907,7 +944,7 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 				if(g_cvEnableDeathmatchMusic != null && g_cvEnableDeathmatchMusic.IntValue == 0)
 				{
 					//validate winner client
-					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
+					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Error - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
 					//set endCondition to None/Invalid
 					endConditionOverride = 0;
 					//potr is winner client
@@ -922,7 +959,7 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 				else
 				{
 					//validate winner client
-					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
+					if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Error - ForceEndRound provided deathmatch winner client \"%d\" is invalid.", winner); return false;}
 					//set endCondition to Deathmatch
 					endConditionOverride = 2;
 					//set winnerOverride to provided winner
@@ -934,7 +971,7 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 			case TE_Time:
 			{
 				//validate winner team
-				if(winner < 0 || winner > 2) {PrintToServer("[TCR] Debug - ForceEndRound provided winning-by-time team \"%d\" is invalid.", winner); return false;}
+				if(winner < 0 || winner > 2) {PrintToServer("[TCR] Error - ForceEndRound provided winning-by-time team \"%d\" is invalid.", winner); return false;}
 				//set endCondition to Time
 				endConditionOverride = 3;
 				//mp_forcewin (winner)
@@ -942,7 +979,7 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 			}
 			case TE_Solo:
 			{
-				if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Debug - ForceEndRound provided solo winner client \"%d\" is invalid.", winner); return false;}
+				if(winner <= 0 || winner > MaxClients || !IsClientInGame(winner)) {PrintToServer("[TCR] Error - ForceEndRound provided solo winner client \"%d\" is invalid.", winner); return false;}
 				//set endCondition to None/Invalid
 				endConditionOverride = 0;
 				//potr is winner client
@@ -954,14 +991,14 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 		}
 	}
 	else
-	{PrintToServer("[TCR] Debug - ForceEndRound provided endCondition \"%d\" is invalid.", endCondition); return false;}
+	{PrintToServer("[TCR] Error - ForceEndRound provided endCondition \"%d\" is invalid.", endCondition); return false;}
 	if(forceWinActive)
 	{
 		g_cvDataForceWinActive.SetInt(1);
-		PrintToServer("[TCR] ForceEndRound called with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
+		if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceEndRound called with endCondition \"%d\" and winner \"%d\".", endCondition, winner);}
 		return true;
 	}
-	PrintToServer("[TCR] Debug - ForceEndRound FAILED with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
+	PrintToServer("[TCR] Error - ForceEndRound FAILED with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
 	return false;
 }
 
@@ -1490,15 +1527,15 @@ public int AssignCustomRoleToRandomClientCandidate(int customRoleIndex, int cand
 public void ForceWin(int team)
 {
 	//if team is invalid, stop here and report to server console.
-	if(team < 0 || team > 2) {PrintToServer("[TCR] Debug - ForceWin Invalid Team Input \"%d\"!", team); return;}
+	if(team < 0 || team > 2) {PrintToServer("[TCR] Error - ForceWin Invalid Team Input \"%d\"!", team); return;}
 	
 	//get original flags
 	int originalFlags = GetCommandFlags("mp_forcewin");
-	PrintToServer("[TCR] Debug - ForceWin originalFlags: %d", originalFlags);
+	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceWin originalFlags: %d", originalFlags);}
 	
 	//create modified flags
 	int newFlags = originalFlags & ~FCVAR_CHEAT;
-	PrintToServer("[TCR] Debug - ForceWin newFlags: %d", newFlags);
+	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceWin newFlags: %d", newFlags);}
 	
 	//apply modified flags and call mp_forcewin
 	SetCommandFlags("mp_forcewin", newFlags);
