@@ -529,11 +529,13 @@ native any ForceEndRound(any endCondition, int winner);
 Registers a CustomRole and returns the CustomRole index.
 This is way too bloated to reasonably make documentation for.
 I reccomend users just read the parameters, as it should be reasonably self-explanatory.
-I also reccomend users to just look at the template role plugin.
+I also reccomend users to just look at the examples role plugins on GitHub.
 */
 native int RegisterCustomRole
 (
+	int PROTOTYPE_VERSION, // THIS IS PROTOTYPE VERSION 2.
 	char[] id,
+	int test,
 	char[] displayName,
 	
 	any underlyingRole,
