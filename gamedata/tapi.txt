@@ -16,6 +16,18 @@
 			{
 				"windows"	"0x12B0‬"
 			}
+			"PlayerCorrectKills"
+			{
+				"windows"	"0x11c4"
+			}
+			"PlayerIncorrectKills"
+			{
+				"windows"	"0x11c8"
+			}
+			"PlayerKillCount"
+			{
+				"windows"	"0x1398"
+			}
 		}
 		
 		"Signatures"
