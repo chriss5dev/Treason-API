@@ -82,6 +82,11 @@
                 "library"   "server"
                 "windows"   "\x55\x8B\xEC\x51\xA1\x2A\x2A\x2A\x2A\x53\x8B\xD9\x89\x5D\xFC\x83\x78\x30\x00"
             }
+			"Util_SayText"
+			{
+				"library"	"server"
+				"windows"	"\x55\x8B\xEC\x83\xEC\x2A\x56\x8B\x75\x2A\x8B\xCE\x8B\x06\x8B\x80\x2A\x2A\x2A\x2A\xFF\xD0"
+			}
 		}
 		
 		"Functions"
@@ -132,6 +137,25 @@
                     "arg6"
                     {
                         "type" "int"
+                    }
+                }
+            }
+			"Util_SayText"
+            {
+                "signature" "Util_SayText"
+                "callconv" "thiscall"
+                "hooktype" "raw"
+                "return" "void"
+                "this" "address"
+                "arguments"
+                {
+                    "message"
+                    {
+                        "type" "charptr"
+                    }
+                    "player"
+                    {
+                        "type" "cbaseentity"
                     }
                 }
             }
