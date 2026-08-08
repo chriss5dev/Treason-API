@@ -14,7 +14,7 @@ public Plugin myinfo =
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
-	version = "1.01",
+	version = "1.1",
 	url = "https://github.com/chriss5dev/Treason-API"
 };
 
@@ -23,6 +23,7 @@ GlobalForward g_SoloStoppedRoundEndForward;
 GlobalForward g_SoloWinForward;
 GlobalForward g_ClearRolesForward;
 GlobalForward g_AssignedCustomRoleForward;
+GlobalForward g_RoundEndForward; // OnTreasonRoundEnd(int winner, int reason)
 
 ConVar g_cvDebug;
 ConVar g_cvMinCustomRolesTraitor;
@@ -203,6 +204,7 @@ public void CreateForwards()
 	g_SoloWinForward = new GlobalForward("OnSoloWin", ET_Ignore, Param_Cell, Param_Cell);
 	g_ClearRolesForward = new GlobalForward("OnClearCustomRoles", ET_Ignore);
 	g_AssignedCustomRoleForward = new GlobalForward("OnClientAssignedCustomRole", ET_Ignore, Param_Cell, Param_Cell);
+	g_RoundEndForward = new GlobalForward("OnTreasonRoundEnd", ET_Ignore, Param_Cell, Param_Cell); // OnTreasonRoundEnd(int winner, int reason)
 }
 
 public void CreateConVars()
@@ -1796,6 +1798,11 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 			winner = winnerOverride;
 			winnerOverride = -1;
 		}
+		PrintToServer("[TCR] Calling Global Forward \"OnTreasonRoundEnd()\"...");
+		Call_StartForward(g_RoundEndForward);
+		Call_PushCell(winner);
+		Call_PushCell(reason);
+		Call_Finish();
 		return MRES_ChangedHandled;
 	}
 	else if (soloLastAlive != 0 && reason != 3) //if soloAlive and reason is NOT time
@@ -1835,6 +1842,11 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 		return MRES_Supercede;
 	}
 	
+	PrintToServer("[TCR] Calling Global Forward \"OnSoloStoppedRoundEnd()\"...");
+	Call_StartForward(g_SoloStoppedRoundEndForward);
+	Call_PushCell(winner);
+	Call_PushCell(reason);
+	Call_Finish();
 	return MRES_Ignored;
 }
 
