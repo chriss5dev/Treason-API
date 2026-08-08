@@ -4,9 +4,10 @@
 #include <sdkhooks>
 #include <dhooks>
 #include <treason>
+#include "treason_customroles.sp"
 
-#define TAPI_VERSION "1.3.2"
-#define TAPI_VERSION_INT 010302
+#define TAPI_VERSION "1.4"
+#define TAPI_VERSION_INT 010400
  
 public Plugin myinfo =
 {
@@ -38,13 +39,17 @@ int g_ZombieOffset = -1;
 int g_RoleOffset = -1;
 
 //ConVars
-ConVar g_cvEnableDeathmatchMusic;
-ConVar g_cvDataForceWinActive;
+//ConVar g_cvEnableDeathmatchMusic;
+//ConVar g_cvDataForceWinActive;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	RegPluginLibrary("Treason API");
+	RegPluginLibrary("TAPI");
 	CreateNatives();
+	
+	//TCR
+	TCR_CreateNatives();
+	
 	return APLRes_Success;
 }
 
@@ -55,11 +60,17 @@ public void OnPluginStart()
 	CreateConVars();
 	RegisterCommands();
 	PrintToServer("[TAPI] Treason API Loaded! Version %s", TAPI_VERSION);
+	
+	//TCR
+	TCR_OnPluginStart();
 }
 
 public void OnMapStart()
 {
     PlayerResourceEntity = GetPlayerResourceEntity();
+	
+	//TCR
+	TCR_OnMapStart();
 }
 
 public void OnClientConnected(int client)
@@ -70,6 +81,41 @@ public void OnClientConnected(int client)
 public void OnClientDisconnect(int client)
 {
 	g_HasPseudoOverride[client] = false;
+	
+	//TCR
+	TCR_OnClientDisconnect(client);
+}
+
+public void OnAllPluginsLoaded()
+{
+	//detect old treason_customroles.smx
+	if(LibraryExists("Treason Custom Roles") || FindPluginByFile("treason_customroles.smx") != null)
+	{
+		SetFailState(
+            "Outdated treason_customroles.smx detected! TCR is now included in treason_api.smx. Remove treason_customroles.smx and UPDATE TAPI!"
+        );
+	}
+	
+	//TCR
+	//TCR_OnAllPluginsLoaded();
+}
+
+public Action OnClientPreAdminCheck(int client)
+{
+	//TCR
+	TCR_OnClientPreAdminCheck(client);
+}
+
+public void OnClientPutInServer(int client)
+{
+	//TCR
+	TCR_OnClientPutInServer(client);
+}
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	//TCR
+	TCR_OnEntityCreated(entity, classname);
 }
 
 public void SDKSetup()
@@ -220,6 +266,9 @@ public void RegisterCommands()
 	//reset or clear
 	RegAdminCmd("tapi_resetabilities", Cmd_GetRole, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_resetgadgets", Cmd_GetRole, ADMFLAG_ROOT); */
+	
+	//TCR
+	TCR_RegisterCommands();
 }
 
 public void HookEvents()
@@ -230,11 +279,14 @@ public void HookEvents()
 	HookEvent("player_death", E_PlayerDeath);
 	HookEvent("ability_resus_detective_used", E_ResuscitateDetective);
 	HookEvent("ability_resuscitate_used", E_Resuscitate);
+	
+	//TCR
+	TCR_HookEvents();
 }
 
 public void CreateConVars()
 {
-	g_cvEnableDeathmatchMusic = CreateConVar("tapi_deathmatchmusic", "0", "Enables the \"carend.wav\" sound that plays at the end of carnage rounds if not set to 0. This has minor visual downsides, such as the winner name being \"[REDACTED]\". To remedy this, the winner is placed in chat.", _, true, 0.0);
+	g_cvEnableDeathmatchMusic = CreateConVar("tapi_deathmatchmusic", "0", "Enables the \"carend.wav\" sound that plays at the end of carnage rounds if not set to 0. Disabling this has minor visual downsides, such as the winner name being \"[REDACTED]\". To remedy this, the winner is placed in chat.", _, true, 0.0);
 	
 	g_cvDataForceWinActive = FindConVar("tapi_data_forcewinactive");
 
@@ -250,13 +302,14 @@ public void E_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 public Action E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
-	int forceWinActive = 0;
+	// forceWinActive is now included and updated from treason_customroles since 1.4.0 "conglomorate" branch
+	/*int forceWinActive = 0;
 	if(g_cvDataForceWinActive != null)
-	{forceWinActive = g_cvDataForceWinActive.IntValue;}
+	{forceWinActive = g_cvDataForceWinActive.IntValue;}*/
 	int enableDeathmatchMusic = g_cvEnableDeathmatchMusic.IntValue;
 	
 	// if forceWinActive is false && its a deathmatch round end && deathmatch music disabled
-	if(forceWinActive == 0 && event.GetInt("reason") == 2 && enableDeathmatchMusic == 0)
+	if(!forceWinActive && event.GetInt("reason") == 2 && enableDeathmatchMusic == 0)
 	{
 		int winner = event.GetInt("winner");
 		
@@ -382,20 +435,18 @@ public Action Cmd_GetRoleID(int client, int args)
 {
 	if(args == 0)
 	{
-		int role;
-		
 		if(client==0)
-		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		{PrintToConsole(client, "Source client of this command can not be the server."); return Plugin_Handled;}
 		else if(!IsClientInGame(client))
-		{PrintToConsole(client, "Source client of this command instance is invalid.");}
-		else if(role < 0 || role > 5)
+		{PrintToConsole(client, "Source client of this command instance is invalid."); return Plugin_Handled;}
+		
+		int role = GetClientRoleID(client);
+		if(role < 0 || role > 5)
 		{
-			role = GetClientRoleID(client);
 			PrintToConsole(client, "Client has role ID %d. This role ID is invalid.", role);
 		}
 		else
 		{
-			role = GetClientRoleID(client);
 			PrintToConsole(client, "Client has role ID %d.", role);
 		}
 	}
@@ -410,13 +461,13 @@ public Action Cmd_GetRole(int client, int args)
 {
 	if(args == 0)
 	{
-		int role;
-		
 		if(client==0)
-		{PrintToConsole(client, "Source client of this command can not be the server.");}
+		{PrintToConsole(client, "Source client of this command can not be the server."); return Plugin_Handled;}
 		else if(!IsClientInGame(client))
-		{PrintToConsole(client, "Source client of this command instance is invalid.");}
-		else if(role < 0 || role > 7)
+		{PrintToConsole(client, "Source client of this command instance is invalid."); return Plugin_Handled;}
+		
+		int role = GetClientRole(client);
+		if(role < 0 || role > 7)
 		{
 			role = GetClientRole(client);
 			PrintToConsole(client, "Client has role %d. This role is invalid.", role);
@@ -986,6 +1037,6 @@ public MRESReturn DetourGetClientPseudoName(Address pThis, DHookReturn hReturn, 
         hReturn.Value = g_PseudoOverride[client];
         return MRES_Supercede;
     }
-
+	
     return MRES_Ignored;
 }

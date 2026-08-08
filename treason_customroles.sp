@@ -6,17 +6,20 @@
 #include <treason>
 #include <chriss5math>
 #define MAXCUSTOMROLES 16
-#define REQUIRED_TAPI_VERSION 010301
+//#define REQUIRED_TAPI_VERSION 010400
 #define PROTOTYPE_VERSION_LATEST 1
 
-public Plugin myinfo =
+//TCR VERSION
+// 1.2
+
+/*public Plugin myinfo =
 {
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
-	version = "1.1",
+	version = "1.2",
 	url = "https://github.com/chriss5dev/Treason-API"
-};
+};*/
 
 GlobalForward g_RegisterCustomRolesForward;
 GlobalForward g_SoloStoppedRoundEndForward;
@@ -51,38 +54,32 @@ int winnerOverride = -1;
 bool forceWinActive = false;
 bool g_lastInnocentTriggeredThisRound = false;
 
-public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+public void TCR_OnAllPluginsLoaded()
 {
-	RegPluginLibrary("Treason Custom Roles");
-	CreateNatives();
-	
-	return APLRes_Success;
-}
-
-public void OnAllPluginsLoaded()
-{
-	if (TAPI_Version() < REQUIRED_TAPI_VERSION)
+	return;
+	// no longer possible due to TCR being included in TAPI.
+	/*if (TAPI_Version() < REQUIRED_TAPI_VERSION)
 	{
 		SetFailState(
 			"[TCR] Treason Custom Roles requires Treason API version %d or later!",
 			REQUIRED_TAPI_VERSION
 		);
-	}
+	}*/
 }
 
 // initialize and setup
-public void OnPluginStart()
+public void TCR_OnPluginStart()
 {
-	SDKSetup();
-	CreateForwards();
-	CreateConVars();
-	HookEvents();
+	TCR_SDKSetup();
+	TCR_CreateForwards();
+	TCR_CreateConVars();
+	TCR_HookEvents();
 	RegisterCommands();
 	ClearCustomRoles();
 	PrintToServer("[TCR] Treason Custom Roles Loaded!");
 }
 
-public void OnMapStart()
+public void TCR_OnMapStart()
 {
 	AddFolderToDownloadsTable("models/props_cluesystem/custom");
 	AddFolderToDownloadsTable("models/player/custom");
@@ -91,7 +88,7 @@ public void OnMapStart()
 	AddFolderToDownloadsTable("materials/models/props_cluesystem/custom");
 }
 
-public Action OnClientPreAdminCheck(int client)
+public Action TCR_OnClientPreAdminCheck(int client)
 {
 	char action1Key[16];
 	g_cvAction1Key.GetString(action1Key, sizeof(action1Key));
@@ -128,21 +125,21 @@ public void OnDownloadFilterChecked
 	}
 }
 
-public void OnClientPutInServer(int client)
+public void TCR_OnClientPutInServer(int client)
 {
 	g_ClientRoles[client] = 0;
 	g_ClientClasses[client] = 0;
 	SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
-public void OnClientDisconnect(int client)
+public void TCR_OnClientDisconnect(int client)
 {
 	g_ClientRoles[client] = 0;
 	g_ClientClasses[client] = 0;
 	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
-public void OnEntityCreated(int entity, const char[] classname)
+public void TCR_OnEntityCreated(int entity, const char[] classname)
 {
 	if (!StrEqual(classname, "prop_physics")) {return;}
 
@@ -165,7 +162,7 @@ public void CheckNewPropPhysics(any ref)
 	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - Replaced pole model on entity %d", entity);}
 }
 
-public void SDKSetup()
+public void TCR_SDKSetup()
 {
 	Handle hGameConf = LoadGameConfigFile("tapi");
 	if (hGameConf == null)
@@ -187,17 +184,12 @@ public void SDKSetup()
 	delete hGameConf;
 	if (g_hEndRound == null)
 	{
-		SetFailState("Failed to run SDKSetup!");
+		SetFailState("Failed to run TCR_SDKSetup!");
 	}
 }
 
-public void OnRegisterCustomRoles()
-{
-	// nothing
-}
-
 // shortcut functions
-public void CreateForwards()
+public void TCR_CreateForwards()
 {
 	g_RegisterCustomRolesForward = new GlobalForward("OnRegisterCustomRoles", ET_Ignore);
 	g_SoloStoppedRoundEndForward = new GlobalForward("OnSoloStoppedRoundEnd", ET_Ignore, Param_Cell);
@@ -207,7 +199,7 @@ public void CreateForwards()
 	g_RoundEndForward = new GlobalForward("OnTreasonRoundEnd", ET_Ignore, Param_Cell, Param_Cell); // OnTreasonRoundEnd(int winner, int reason)
 }
 
-public void CreateConVars()
+public void TCR_CreateConVars()
 {
 	g_cvDebug = CreateConVar("tapi_cr_debug", "1", "Displays debugging messages in the server console when set to 1. Primarily intended for custom role development.");
 	g_cvEnableDeathmatchMusic = FindConVar("tapi_deathmatchmusic");
@@ -223,7 +215,7 @@ public void CreateConVars()
 	g_cvMaxCustomRolesSolo = CreateConVar("tapi_cr_max_solo", "1", "The maximum amount of custom solo-roles to consider assigning to innocents at round start, when possible. In any normal game, you likely don't want this to be greater than 1.", _, true, 0.0);
 }
 
-public void CreateNatives()
+public void TCR_CreateNatives()
 {
 	CreateNative("IsClientSoloCustomRole", N_IsClientSoloCustomRole);
 	CreateNative("GetClientRoleName", N_GetClientRoleName);
@@ -238,24 +230,24 @@ public void CreateNatives()
 	CreateNative("RegisterCustomRole", N_RegisterCustomRole);
 }
 
-public void HookEvents()
+public void TCR_HookEvents()
 {
-	HookEvent("preround_start", E_PreRoundStart);
-	HookEvent("round_start", E_RoundStartPre, EventHookMode_Pre);
-	HookEvent("round_start", E_RoundStartPost, EventHookMode_Post);
-	HookEvent("round_end", E_RoundEnd, EventHookMode_Pre);
-	HookEvent("role_revealed", E_AllRoleRevealEvents, EventHookMode_Pre);
-	HookEvent("first_body_found", E_AllRoleRevealEvents, EventHookMode_Pre);
-	HookEvent("first_role_revealed", E_AllRoleRevealEvents, EventHookMode_Pre);
-	HookEvent("ability_resuscitate_used", E_Resuscitate, EventHookMode_Post);
-	HookEvent("ability_revive_used", E_Revive, EventHookMode_Post);
-	HookEvent("last_innocent", E_LastInnocent, EventHookMode_Pre);
-	HookEvent("player_class", E_PlayerChangeClass, EventHookMode_Post);
-	//HookEvent("ability_resus_detective_used", E_ResuscitateDetective);
-	//HookEvent("ability_resuscitate_used", E_Resuscitate);
+	HookEvent("preround_start", E_TCR_PreRoundStart);
+	HookEvent("round_start", E_TCR_RoundStartPre, EventHookMode_Pre);
+	HookEvent("round_start", E_TCR_RoundStartPost, EventHookMode_Post);
+	HookEvent("round_end", E_TCR_RoundEnd, EventHookMode_Pre);
+	HookEvent("role_revealed", E_TCR_AllRoleRevealEvents, EventHookMode_Pre);
+	HookEvent("first_body_found", E_TCR_AllRoleRevealEvents, EventHookMode_Pre);
+	HookEvent("first_role_revealed", E_TCR_AllRoleRevealEvents, EventHookMode_Pre);
+	HookEvent("ability_resuscitate_used", E_TCR_Resuscitate, EventHookMode_Post);
+	HookEvent("ability_revive_used", E_TCR_Revive, EventHookMode_Post);
+	HookEvent("last_innocent", E_TCR_LastInnocent, EventHookMode_Pre);
+	HookEvent("player_class", E_TCR_PlayerChangeClass, EventHookMode_Post);
+	//HookEvent("ability_resus_detective_used", E_TCR_ResuscitateDetective);
+	//HookEvent("ability_resuscitate_used", E_TCR_Resuscitate);
 }
 
-public void RegisterCommands()
+public void TCR_RegisterCommands()
 {
 	RegConsoleCmd("tapi_action1", CmdAction1);
 
@@ -271,7 +263,7 @@ public void RegisterCommands()
 }
 
 //EVENTS
-public void E_PreRoundStart(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_PreRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if(forceWinActive)
 	{
@@ -291,7 +283,7 @@ public void E_PreRoundStart(Event event, const char[] name, bool dontBroadcast)
 	Call_Finish();
 }
 
-public void E_RoundStartPre(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_RoundStartPre(Event event, const char[] name, bool dontBroadcast)
 {
 	bool isCarnage = event.GetBool("iscarnage");
 	if(!isCarnage)
@@ -305,7 +297,7 @@ public void E_RoundStartPre(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void E_RoundStartPost(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_RoundStartPost(Event event, const char[] name, bool dontBroadcast)
 {
 	TempDisableRatingPunishments();
 	ResetAllKarma();
@@ -322,7 +314,7 @@ public void E_RoundStartPost(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public Action E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+public Action E_TCR_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	if(g_HudTimer != INVALID_HANDLE)
 	{
@@ -360,7 +352,7 @@ public Action E_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 	return Plugin_Continue;
 }
 
-public Action E_AllRoleRevealEvents(Event event, const char[] name, bool dontBroadcast)
+public Action E_TCR_AllRoleRevealEvents(Event event, const char[] name, bool dontBroadcast)
 {
 	int clientid = event.GetInt("userid");
 	int client = GetClientOfUserId(clientid);
@@ -384,7 +376,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 	return Plugin_Continue;
 }
 
-public Action E_LastInnocent(Event event, const char[] name, bool dontBroadcast)
+public Action E_TCR_LastInnocent(Event event, const char[] name, bool dontBroadcast)
 {
 	if(g_lastInnocentTriggeredThisRound)
 	{return Plugin_Handled;}
@@ -418,7 +410,7 @@ public Action E_LastInnocent(Event event, const char[] name, bool dontBroadcast)
 	return Plugin_Continue;
 }
 
-public void E_Resuscitate(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_Resuscitate(Event event, const char[] name, bool dontBroadcast)
 {
 	for(int i = 1;i <= MaxClients; i++)
 	{
@@ -437,12 +429,12 @@ public void E_Resuscitate(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void E_Revive(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_Revive(Event event, const char[] name, bool dontBroadcast)
 {
 	//unused
 }
 
-public void E_PlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
+public void E_TCR_PlayerChangeClass(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	int newClass = event.GetInt("class");
