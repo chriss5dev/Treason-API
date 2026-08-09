@@ -1,7 +1,7 @@
 # Treason API for SourceMod
 
-*Note that Klaus Veen's Treason does NOT have any official SourceMod extension or abstraction layer as of 8/9/2026.
-This project is an abstraction layer for interacting with KVT in SourceMod plugins.*
+*Note that Klaus Veen's Treason does NOT have an official SourceMod extension or abstraction layer as of 8/9/2026.
+This project is an abstraction layer that allows SourcePawn to interact with KVT using the built-in `native` system.*
 
 The first goal of this project is to condense the amount of code required to interact with Treason-exclusive data, which improves readability.
 An example of this is fetching a client's Treason role using a single function `GetClientRole(client)`.
