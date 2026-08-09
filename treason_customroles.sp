@@ -6,18 +6,18 @@
 #include <treason>
 #include <chriss5math>
 #define MAXCUSTOMROLES 16
-//#define REQUIRED_TAPI_VERSION 010400
-#define PROTOTYPE_VERSION_LATEST 1
+//#define REQUIRED_TAPI_VERSION 010500
+#define PROTOTYPE_VERSION_LATEST 2
 
 //TCR VERSION
-// 1.2
+// 1.3
 
 /*public Plugin myinfo =
 {
 	name = "Treason Custom Roles",
 	author = "chriss5",
 	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
-	version = "1.2",
+	version = "1.3",
 	url = "https://github.com/chriss5dev/Treason-API"
 };*/
 

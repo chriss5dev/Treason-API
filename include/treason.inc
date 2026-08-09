@@ -195,6 +195,26 @@ Returns true on success.
 native any SetClientZombie(int client, int isZombie, int role);
 
 /* 
+Sets whether a client is revealed.
+Only valid state values are 0 and 1. (false and true)
+
+@param client				The target client index.
+@return					The revealed state of the provided client, formatted as described above.				
+*/
+native any IsClientRevealed(int client);
+
+/* 
+Sets whether a client is revealed.
+Only valid state values are 0 and 1. (false and true)
+Returns false on failure.
+Returns true on success.
+
+@param client				The target client index.
+@param isRevealed			The desired revealed state to apply to the provided client, formatted as described above.
+*/
+native any SetClientRevealed(int client, int isRevealed);
+
+/* 
 Returns the PseudoName of a client index as an integer.
 
 @param client				The target client index.

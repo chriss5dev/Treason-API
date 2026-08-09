@@ -6,8 +6,8 @@
 #include <treason>
 #include "treason_customroles.sp"
 
-#define TAPI_VERSION "1.4"
-#define TAPI_VERSION_INT 010400
+#define TAPI_VERSION "1.5"
+#define TAPI_VERSION_INT 010500
  
 public Plugin myinfo =
 {
@@ -215,6 +215,8 @@ public void CreateNatives()
 	CreateNative("SetClientKarma", N_SetClientKarma);
 	CreateNative("IsClientZombie", N_IsClientZombie);
 	CreateNative("SetClientZombie", N_SetClientZombie);
+	CreateNative("IsClientRevealed", N_IsClientRevealed);
+	CreateNative("SetClientRevealed", N_SetClientRevealed);
 	CreateNative("GetClientPseudoName", N_GetClientPseudoName);
 	CreateNative("OverrideClientPseudoName", N_OverrideClientPseudoName);
 	CreateNative("RestoreClientPseudoName", N_RestoreClientPseudoName);
@@ -799,6 +801,36 @@ public any N_SetClientRole(Handle plugin, int numParams)
 		return true;
 	}
 	return false;
+}
+
+public any N_IsClientRevealed(Handle plugin, int numParams)
+{
+	// PRE must exist
+	if(PlayerResourceEntity == -1) {return -1;}		
+	
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	// Read from netprop
+	bool revealed = GetEntProp(PlayerResourceEntity, Prop_Send, "m_bRevealed", 1, client);
+	
+	return revealed;
+}
+
+public any N_SetClientRevealed(Handle plugin, int numParams)
+{
+	// PRE must exist
+	if(PlayerResourceEntity == -1) {return false;}		
+	
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	// Get desired revealed state (parameter 2)
+	int revealed = GetNativeCell(2);
+	
+	// Set netprop
+	SetEntProp(PlayerResourceEntity, Prop_Send, "m_bRevealed", revealed, 1, client);
+	
+	return true;
 }
 
 public any N_GetClientRoleIDName(Handle plugin, int numParams)
