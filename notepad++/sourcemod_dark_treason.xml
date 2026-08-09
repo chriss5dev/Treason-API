@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <NotepadPlus>
-    <UserLang name="sourcemod_dark_treason" ext="sp" udlVersion="2.1">
+    <UserLang name="sourcemod_dark_treason" ext="sp inc" udlVersion="2.1">
         <Settings>
             <Global caseIgnored="no" allowFoldOfComments="yes" foldCompact="no" forcePureLC="0" decimalSeparator="0" />
             <Prefix Keywords1="no" Keywords2="yes" Keywords3="no" Keywords4="no" Keywords5="no" Keywords6="no" Keywords7="yes" Keywords8="yes" />
@@ -2803,7 +2803,8 @@ AddClientGadget
 OnRegisterCustomRoles
 OnClearCustomRoles
 OnClientAssignedCustomRole
-</Keywords>
+IsClientRevealed
+SetClientRevealed</Keywords>
             <Keywords name="Keywords6">TRole_Unassigned TR_None
  TRole_Innocent  TR_Innocent
  TRole_Traitor  TR_Traitor
