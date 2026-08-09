@@ -601,6 +601,7 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 	char playerModel[PLATFORM_MAX_PATH];
 	bool useClassPlayerModels;
 	char poleModel[PLATFORM_MAX_PATH];
+	bool isConfirmed;
 	bool discardRoleAbilities;
 	bool discardRoleGadgets;
 	bool keepClassAbility;
@@ -643,6 +644,38 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 			if(GetNativeArray(24, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 24!"); return -1;}
 			if(GetNativeArray(25, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 25!"); return -1;}
 			winIfLastAlive = GetNativeCell(26);
+			
+			//backwards compatibility
+			isConfirmed = false;
+		}
+		case 2:
+		{
+			// PROTOTYPE VERSION 2
+			if(GetNativeString(3, displayName, 32) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 3!"); return -1;}
+			underlyingRole = GetNativeCell(4);
+			underlyingClass = GetNativeCell(5);
+			prevalence = GetNativeCell(6);
+			weight = GetNativeCell(7);
+			minPlayers = GetNativeCell(8);
+			maxPlayers = GetNativeCell(9);
+			minTraitors = GetNativeCell(10);
+			minInnocents = GetNativeCell(11);
+			requireDetective = GetNativeCell(12);
+			requireDoctor = GetNativeCell(13);
+			maxHealthBonus = GetNativeCell(14);
+			displayAboveText = GetNativeCell(15);
+			if(GetNativeArray(16, roleColor, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 16!"); return -1;}
+			roleTextBrightness = GetNativeCell(17);
+			if(GetNativeString(18, playerModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 18!"); return -1;}
+			useClassPlayerModels = GetNativeCell(19);
+			if(GetNativeString(20, poleModel, PLATFORM_MAX_PATH) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 20!"); return -1;}
+			isConfirmed = GetNativeCell(21);
+			discardRoleAbilities = GetNativeCell(22);
+			discardRoleGadgets = GetNativeCell(23);
+			keepClassAbility = GetNativeCell(24);
+			if(GetNativeArray(25, abilities, 3) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 25!"); return -1;}
+			if(GetNativeArray(26, gadgets, 2) != SP_ERROR_NONE) {PrintToServer("[TCR] Error - N_RegisterCustomRole failed at parameter 26!"); return -1;}
+			winIfLastAlive = GetNativeCell(27);
 		}
 		default:
 		{
@@ -675,6 +708,7 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 		playerModel,
 		useClassPlayerModels,
 		poleModel,
+		isConfirmed,
 		
 		discardRoleAbilities,
 		discardRoleGadgets,
@@ -686,7 +720,7 @@ public int N_RegisterCustomRole(Handle plugin, int numParams)
 	);
 }
 
-public int RegCustomRole
+public int RegCustomRole //prototype v2
 (
 	const char[] id,
 	const char[] displayName,
@@ -710,6 +744,7 @@ public int RegCustomRole
 	const char[] playerModel,
 	bool useClassPlayerModels,
 	const char[] poleModel,
+	bool isConfirmed,
 	
 	bool discardRoleAbilities,
 	bool discardRoleGadgets,
@@ -788,6 +823,7 @@ public int RegCustomRole
 			strcopy(g_CustomRoles[i].playerModel, sizeof(g_CustomRoles[].playerModel), playerModel);
 			g_CustomRoles[i].useClassPlayerModels = useClassPlayerModels;
 			strcopy(g_CustomRoles[i].poleModel, sizeof(g_CustomRoles[].poleModel), poleModel);
+			g_CustomRoles[i].isConfirmed = isConfirmed;
 			
 			//doohickeys
 			g_CustomRoles[i].discardRoleAbilities = discardRoleAbilities;

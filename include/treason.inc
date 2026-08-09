@@ -92,7 +92,7 @@ enum treasonEndCondition
 }
 
 // enum struct
-enum struct CustomRole
+enum struct CustomRole //v2 prototype
 {
 	//indentification
 	char id[32];
@@ -120,6 +120,7 @@ enum struct CustomRole
 	char playerModel[PLATFORM_MAX_PATH];
 	bool useClassPlayerModels;
 	char poleModel[PLATFORM_MAX_PATH];
+	bool isConfirmed;
 	
 	//doohickeys
 	bool discardRoleAbilities;
@@ -556,6 +557,7 @@ native int RegisterCustomRole
 	char[] playerModel,
 	bool useClassPlayerModels,
 	char[] poleModel,
+	bool isConfirmed, //v2
 	
 	bool discardRoleAbilities,
 	bool discardRoleGadgets,
@@ -565,3 +567,39 @@ native int RegisterCustomRole
 	
 	bool winIfLastAlive
 );
+/* OUTDATED PROTOTYPE VERSIONS:
+native int RegisterCustomRole
+(
+	int PROTOTYPE_VERSION, // THIS IS PROTOTYPE VERSION 1.
+	char[] id,
+	char[] displayName,
+	
+	any underlyingRole,
+	any underlyingClass,
+	int prevalence,
+	int weight,
+	int minPlayers,
+	int maxPlayers,
+	int minTraitors,
+	int minInnocents,
+	bool requireDetective,
+	bool requireDoctor,
+	
+	int maxHealth,
+	
+	bool displayAboveText,
+	int roleColor[3],
+	int roleTextBrightness,
+	char[] playerModel,
+	bool useClassPlayerModels,
+	char[] poleModel,
+	
+	bool discardRoleAbilities,
+	bool discardRoleGadgets,
+	bool keepClassAbility,
+	any abilities[3],
+	any gadgets[2],
+	
+	bool winIfLastAlive
+);
+*/
