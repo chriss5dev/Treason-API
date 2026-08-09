@@ -1,10 +1,10 @@
 # Treason API for SourceMod
 
-*Note that Klaus Veen's Treason is NOT fully supported by SourceMod as of 7/21/2026, and so has no official extension or wrapper.
-This is my way of centralizing all of my KVT plugins' most important functions (fetching data from KVT) to make my life easier.*
+*Note that Klaus Veen's Treason does NOT have any official SourceMod extension or abstraction layer as of 8/9/2026.
+This project is an abstraction layer for interacting with KVT in SourceMod plugins.*
 
 The first goal of this project is to condense the amount of code required to interact with Treason-exclusive data, which improves readability.
-An example of this is fetching a client's Treason role using a single function "GetClientRole()".
+An example of this is fetching a client's Treason role using a single function `GetClientRole(client)`.
 
 The second goal of this project is to remove the need to patch every KVT plugin in the future, replacing it with a single plugin update.
 
