@@ -737,7 +737,7 @@ public any N_GetClientRoleID(Handle plugin, int numParams)
 	// Get client index (parameter 1)
 	int client = GetNativeCell(1);
 	
-	if(IsClientInGame(client))
+	if(client <= MaxClients && IsClientInGame(client))
 	{
 		//check server memory
 		return GetEntData(client, g_RoleOffset, 1);
