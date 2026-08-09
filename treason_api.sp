@@ -812,7 +812,7 @@ public any N_IsClientRevealed(Handle plugin, int numParams)
 	int client = GetNativeCell(1);
 	
 	// Read from netprop
-	bool revealed = GetEntProp(PlayerResourceEntity, Prop_Send, "m_bRevealed", 1, client);
+	int revealed = GetEntProp(PlayerResourceEntity, Prop_Send, "m_bRevealed", 1, client);
 	
 	return revealed;
 }
