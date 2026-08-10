@@ -1836,6 +1836,11 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 	else if (soloLastAlive != 0 && reason != 3) //if soloAlive and reason is NOT time
 	{
 		SoloWin(soloLastAlive);
+		PrintToServer("[TCR] Calling Global Forward \"OnTreasonRoundEnd()\"...");
+		Call_StartForward(g_RoundEndForward);
+		Call_PushCell(winner);
+		Call_PushCell(reason);
+		Call_Finish();
 		return MRES_Supercede;
 	}
 	else if(soloAlive != 0 && reason == 1) //if soloAlive and reason is teamwin and theres no forcewin
@@ -1870,8 +1875,8 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 		return MRES_Supercede;
 	}
 	
-	PrintToServer("[TCR] Calling Global Forward \"OnSoloStoppedRoundEnd()\"...");
-	Call_StartForward(g_SoloStoppedRoundEndForward);
+	PrintToServer("[TCR] Calling Global Forward \"OnTreasonRoundEnd()\"...");
+	Call_StartForward(g_RoundEndForward);
 	Call_PushCell(winner);
 	Call_PushCell(reason);
 	Call_Finish();
