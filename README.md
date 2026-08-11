@@ -20,7 +20,7 @@ This project was originally made for my own personal use, but I hope people find
 
 # TAPI ConVars
 `tapi_deathmatchmusic`
-- "Enables the 'carend.wav' sound that plays at the end of carnage rounds if not set to 0. Disabling this has minor visual downsides, such as the winner name being '[REDACTED]'. To remedy this, the winner is placed in chat."
+- "Enables the 'carend.wav' sound that plays at the end of carnage rounds if not set to 0. The workaround used to disable this sound has minor visual downsides, such as the winner name being '[REDACTED]'. To remedy this, the winner is placed in chat."
 
 # TAPI Commands
 ### All Players
