@@ -2,7 +2,6 @@
   #endinput
 #endif
 #define treason_api_included
-#define TAPI_VERSION_INCLUDE "1.3.2"
 
 #include <treason_textpositions>
 
@@ -552,74 +551,78 @@ This is way too bloated to reasonably make documentation for.
 I reccomend users just read the parameters, as it should be reasonably self-explanatory.
 I also reccomend users to just look at the examples role plugins on GitHub.
 */
-native int RegisterCustomRole
-(
-	int PROTOTYPE_VERSION, // THIS IS PROTOTYPE VERSION 2.
-	char[] id,
-	char[] displayName,
-	
-	any underlyingRole,
-	any underlyingClass,
-	int prevalence,
-	int weight,
-	int minPlayers,
-	int maxPlayers,
-	int minTraitors,
-	int minInnocents,
-	bool requireDetective,
-	bool requireDoctor,
-	
-	int maxHealth,
-	
-	bool displayAboveText,
-	int roleColor[3],
-	int roleTextBrightness,
-	char[] playerModel,
-	bool useClassPlayerModels,
-	char[] poleModel,
-	bool isConfirmed, //v2
-	
-	bool discardRoleAbilities,
-	bool discardRoleGadgets,
-	bool keepClassAbility,
-	any abilities[3],
-	any gadgets[2],
-	
-	bool winIfLastAlive
-);
-/* OUTDATED PROTOTYPE VERSIONS:
-native int RegisterCustomRole
-(
-	int PROTOTYPE_VERSION, // THIS IS PROTOTYPE VERSION 1.
-	char[] id,
-	char[] displayName,
-	
-	any underlyingRole,
-	any underlyingClass,
-	int prevalence,
-	int weight,
-	int minPlayers,
-	int maxPlayers,
-	int minTraitors,
-	int minInnocents,
-	bool requireDetective,
-	bool requireDoctor,
-	
-	int maxHealth,
-	
-	bool displayAboveText,
-	int roleColor[3],
-	int roleTextBrightness,
-	char[] playerModel,
-	bool useClassPlayerModels,
-	char[] poleModel,
-	
-	bool discardRoleAbilities,
-	bool discardRoleGadgets,
-	bool keepClassAbility,
-	any abilities[3],
-	any gadgets[2],
-	
-	bool winIfLastAlive
-);
-*/
+
+#if !defined TCR_PROTOTYPE_VERSION
+	#warning "Note: TCR_PROTOTYPE_VERSION undefined; RegisterCustomRole() disabled."
+#elseif TCR_PROTOTYPE_VERSION == 2
+	native int RegisterCustomRole
+	(
+		int PROTOTYPE_VERSION, // Prototype version 2
+		char[] id,
+		char[] displayName,
+
+		any underlyingRole,
+		any underlyingClass,
+		int prevalence,
+		int weight,
+		int minPlayers,
+		int maxPlayers,
+		int minTraitors,
+		int minInnocents,
+		bool requireDetective,
+		bool requireDoctor,
+
+		int maxHealth,
+
+		bool displayAboveText,
+		int roleColor[3],
+		int roleTextBrightness,
+		char[] playerModel,
+		bool useClassPlayerModels,
+		char[] poleModel,
+		bool isConfirmed,
+
+		bool discardRoleAbilities,
+		bool discardRoleGadgets,
+		bool keepClassAbility,
+		any abilities[3],
+		any gadgets[2],
+
+		bool winIfLastAlive
+	);
+#elseif TCR_PROTOTYPE_VERSION == 1
+	native int RegisterCustomRole
+	(
+		int PROTOTYPE_VERSION, // Prototype version 1
+		char[] id,
+		char[] displayName,
+
+		any underlyingRole,
+		any underlyingClass,
+		int prevalence,
+		int weight,
+		int minPlayers,
+		int maxPlayers,
+		int minTraitors,
+		int minInnocents,
+		bool requireDetective,
+		bool requireDoctor,
+
+		int maxHealth,
+
+		bool displayAboveText,
+		int roleColor[3],
+		int roleTextBrightness,
+		char[] playerModel,
+		bool useClassPlayerModels,
+		char[] poleModel,
+
+		bool discardRoleAbilities,
+		bool discardRoleGadgets,
+		bool keepClassAbility,
+		any abilities[3],
+		any gadgets[2],
+
+		bool winIfLastAlive
+	);
+#endif
