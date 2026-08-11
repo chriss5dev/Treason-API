@@ -290,8 +290,11 @@ public void CreateConVars()
 {
 	g_cvEnableDeathmatchMusic = CreateConVar("tapi_deathmatchmusic", "0", "Enables the \"carend.wav\" sound that plays at the end of carnage rounds if not set to 0. Disabling this has minor visual downsides, such as the winner name being \"[REDACTED]\". To remedy this, the winner is placed in chat.", _, true, 0.0);
 	
-	g_cvDataForceWinActive = FindConVar("tapi_data_forcewinactive");
+	//g_cvDataForceWinActive = FindConVar("tapi_data_forcewinactive");
+	//inherited from treason_customroles
 
+	//TCR
+	TCR_CreateConVars();
 }
 
 // EVENTS
