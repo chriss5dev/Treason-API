@@ -97,4 +97,4 @@ This project was originally made for my own personal use, but I hope people find
 # Dependencies
 ### [SendProxy (TheByKotik)](https://github.com/TheByKotik/sendproxy)
 #### Included in all dependent releases.
-Required since release 1.5, [SendProxy (TheByKotik)](https://github.com/TheByKotik/sendproxy) is bundled with all releases in the package.zip. It requires a slightly modified `sourcemod/gamedata/sendproxy.txt`, so the easiest way to install it was to include it in all future releases that require it.
+Required since release 1.5, [SendProxy (TheByKotik)](https://github.com/TheByKotik/sendproxy) is bundled with all applicable releases in the package.zip. It requires a slightly modified `sourcemod/gamedata/sendproxy.txt`, so the easiest way to install it was to include it in all future releases that require it.
