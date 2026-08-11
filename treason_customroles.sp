@@ -72,9 +72,6 @@ public void TCR_OnPluginStart()
 {
 	TCR_SDKSetup();
 	TCR_CreateForwards();
-	TCR_CreateConVars();
-	TCR_HookEvents();
-	RegisterCommands();
 	ClearCustomRoles();
 	PrintToServer("[TCR] Treason Custom Roles Loaded!");
 }
