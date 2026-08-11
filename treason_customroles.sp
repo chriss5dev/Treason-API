@@ -1874,12 +1874,6 @@ public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 		
 		return MRES_Supercede;
 	}
-	
-	PrintToServer("[TCR] Calling Global Forward \"OnTreasonRoundEnd()\"...");
-	Call_StartForward(g_RoundEndForward);
-	Call_PushCell(winner);
-	Call_PushCell(reason);
-	Call_Finish();
 	return MRES_Ignored;
 }
 
