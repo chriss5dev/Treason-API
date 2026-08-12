@@ -21,6 +21,15 @@
 	url = "https://github.com/chriss5dev/Treason-API"
 };*/
 
+//offsets
+int g_CorrectKillsOffset = -1;
+int g_IncorrectKillsOffset = -1;
+int g_KillCountOffset = -1;
+
+//kills data storage
+int g_CorrectKills[MAXPLAYERS+1];
+int g_IncorrectKills[MAXPLAYERS+1];
+
 GlobalForward g_RegisterCustomRolesForward;
 GlobalForward g_SoloStoppedRoundEndForward;
 GlobalForward g_SoloWinForward;
@@ -44,6 +53,8 @@ public int g_ClientRoles[MAXPLAYERS+1];
 public int g_ClientClasses[MAXPLAYERS+1];
 public bool g_TempDisabledClients[MAXPLAYERS+1];
 public bool g_RecentlySelectedSoloClients[MAXPLAYERS+1];
+int g_CurrentlyDyingClient = -1;
+int g_CurrentlyKillingClient = -1;
 Handle g_HudTimer = INVALID_HANDLE;
 
 Handle g_hEndRound = INVALID_HANDLE;
@@ -72,8 +83,17 @@ public void TCR_OnPluginStart()
 {
 	TCR_SDKSetup();
 	TCR_CreateForwards();
-	ClearCustomRoles();
+	HookUserMessage(GetUserMessageId("SayText"), SayText, true);
 	PrintToServer("[TCR] Treason Custom Roles Loaded!");
+	
+	ClearCustomRoles();
+	
+	//killcount stuff
+	InitKillArrays();
+	
+	//REMOVE THIS LATER Debug
+	SDKHook(1, SDKHook_OnTakeDamage, OnTakeDamage);
+	SDKHook(2, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
 public void TCR_OnMapStart()
@@ -83,6 +103,9 @@ public void TCR_OnMapStart()
 	AddFolderToDownloadsTable("materials/hud/playercard/custom");
 	AddFolderToDownloadsTable("materials/models/player/custom");
 	AddFolderToDownloadsTable("materials/models/props_cluesystem/custom");
+	
+	//killcount stuff
+	InitKillArrays();
 }
 
 public Action TCR_OnClientPreAdminCheck(int client)
@@ -177,6 +200,27 @@ public void TCR_SDKSetup()
 	{
 		SetFailState("Failed to enable EndRound pre-detour");
 	}
+	
+	g_CorrectKillsOffset = GameConfGetOffset(hGameConf, "PlayerCorrectKills");
+    if (g_CorrectKillsOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerCorrectKills' offset in gamedata");
+    }
+
+	g_IncorrectKillsOffset = GameConfGetOffset(hGameConf, "PlayerIncorrectKills");
+    if (g_IncorrectKillsOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerIncorrectKills' offset in gamedata");
+    }
+
+    g_KillCountOffset = GameConfGetOffset(hGameConf, "PlayerKillCount");
+    if (g_KillCountOffset == -1)
+    {
+        delete hGameConf;
+        SetFailState("Failed to find 'PlayerKillCount' offset in gamedata");
+    }
 	
 	delete hGameConf;
 	if (g_hEndRound == null)
@@ -298,6 +342,7 @@ public void E_TCR_RoundStartPost(Event event, const char[] name, bool dontBroadc
 {
 	TempDisableRatingPunishments();
 	ResetAllKarma();
+	InitKillArrays();
 	
 	bool isCarnage = event.GetBool("iscarnage");
 	if(!isCarnage)
@@ -306,6 +351,13 @@ public void E_TCR_RoundStartPost(Event event, const char[] name, bool dontBroadc
 		
 		if(g_HudTimer == INVALID_HANDLE)
 		{
+			g_HudTimer = CreateTimer(2.0, Timer_HudCustomRoles, _, TIMER_REPEAT);
+		}
+		else
+		{
+			KillTimer(g_HudTimer, true);
+			g_HudTimer = INVALID_HANDLE;
+			
 			g_HudTimer = CreateTimer(2.0, Timer_HudCustomRoles, _, TIMER_REPEAT);
 		}
 	}
@@ -342,10 +394,14 @@ public Action E_TCR_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 		}
 		ClearClientCustomRoles();
 		ClearCustomRoles();
+		ResetAllKarma();
+		OverrideAllKillCounts();
 		return Plugin_Changed;
 	}
 	ClearClientCustomRoles();
 	ClearCustomRoles();
+	ResetAllKarma();
+	OverrideAllKillCounts();
 	return Plugin_Continue;
 }
 
@@ -363,9 +419,17 @@ public Action E_TCR_AllRoleRevealEvents(Event event, const char[] name, bool don
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	//if dmg will kill them
-	if (victim != 0 && damage >= GetClientHealth(victim))
+	//if dmg will kill them && victim is valid range
+	if (victim > 0 && victim <= MaxClients && damage >= GetClientHealth(victim))
 	{
+		// track and validate client indexes
+		if(attacker > 0 && attacker <= MaxClients)
+		{
+			g_CurrentlyDyingClient = victim;
+			g_CurrentlyKillingClient = attacker;
+			IncrementKillCount(attacker, victim);
+		}
+		
 		int user = GetClientUserId(victim);
 		CreateTimer(0.1, Timer_HandleClientDeath, user);
 	}
@@ -439,6 +503,75 @@ public void E_TCR_PlayerChangeClass(Event event, const char[] name, bool dontBro
 	if(!IsClientInGame(client)) {return;}
 	
 	g_ClientClasses[client] = newClass;
+}
+
+//used for overriding killed_by messages
+public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playersNum, bool reliable, bool init)
+{
+	int client = BfReadByte(msg);
+	PrintToServer("[SayText] client:%d;", client);
+	PrintToServer("[SayText] dying:%d;", g_CurrentlyDyingClient);
+	PrintToServer("[SayText] killing:%d;", g_CurrentlyKillingClient);
+	
+	if(g_CurrentlyDyingClient == g_CurrentlyKillingClient || client <= 0)
+	{return Plugin_Continue;}
+	
+	if(client == g_CurrentlyDyingClient)
+	{
+		char buffer[256];
+		BfReadString(msg, buffer, sizeof(buffer));
+		any role = GetClientRoleUnfiltered(client);
+		any killingRole = GetClientRoleUnfiltered(g_CurrentlyKillingClient);
+		PrintToServer("[SayText] client:%d, token:%s;", client, buffer);
+		
+		if(role == TR_Detective){role = TR_Innocent;}
+		if(killingRole == TR_Detective){killingRole = TR_Innocent;}
+		
+		//CASES
+		//solo recieves killed_byteammate (all roles are enemies)
+		if(role == TR_Solo && StrEqual("#Treason_Killed_ByTeammate", buffer, true))
+		{
+			//replace message with enemy
+			CreateSayTextDeferred(client, "#Treason_Killed_ByEnemy");
+			return Plugin_Handled;
+		}
+		//innocent recieves killed_byteammate from solo (solo is not a teammate)
+		if(role == TR_Innocent && killingRole == TR_Solo && StrEqual("#Treason_Killed_ByTeammate", buffer, true))
+		{
+			//replace message with enemy
+			CreateSayTextDeferred(client, "#Treason_Killed_ByEnemy");
+			return Plugin_Handled;
+		}
+		//innocent recieves killed_byinnocent from solo (solo is not an innocent)
+		if(role == TR_Innocent && killingRole == TR_Solo && StrEqual("#Treason_Killed_ByInnocent", buffer, true))
+		{
+			//replace message with enemy
+			CreateSayTextDeferred(client, "#Treason_Killed_ByEnemy");
+			return Plugin_Handled;
+		}
+	}
+	else if(client == g_CurrentlyKillingClient)
+	{
+		char buffer[256];
+		BfReadString(msg, buffer, sizeof(buffer));
+		any role = GetClientRoleUnfiltered(client);
+		//any dyingRole = GetClientRoleUnfiltered(g_CurrentlyDyingClient);
+		PrintToServer("[SayText] client:%d, token:%s, role:%d;", client, buffer, role);
+		
+		if(role == TR_Detective){role = TR_Innocent;}
+		//if(dyingRole == TR_Detective){dyingRole = TR_Innocent;}
+		
+		//CASES
+		//solo recieves killed_detective (detective is not a teammate)
+		if(role == TR_Solo && StrEqual("#Treason_Killed_Detective", buffer, true))
+		{
+			//replace message with someone
+			CreateSayTextDeferred(client, "#Treason_Killed_Someone");
+			return Plugin_Handled;
+		}
+	}
+	
+    return Plugin_Continue;
 }
 
 //COMMANDS
@@ -1586,25 +1719,6 @@ public void TempDisableRatingPunishments()
 
 public void ResetAllKarma()
 {
-	//rewards
-	ServerCommand("t_karma_bear_trap_release 10");
-	ServerCommand("t_karma_bomb_defuse 10");
-	ServerCommand("t_karma_kill_unconfirmed_teammate 10");
-	ServerCommand("t_karma_damage_confirmed_enemy 10");
-	ServerCommand("t_karma_detective_reveal 10");
-	ServerCommand("t_karma_detective_scan 10");
-	ServerCommand("t_karma_healing_doctor 10");
-	ServerCommand("t_karma_healing_doctor_threshold 10");
-	ServerCommand("t_karma_innocent_reveal 10");
-	ServerCommand("t_karma_kill_confirmed_enemy 10");
-	ServerCommand("t_karma_power_supply_turn_on 10");
-	ServerCommand("t_karma_resuscitate_player 10");
-	
-	//punishments
-	ServerCommand("t_karma_damage_confirmed_teammate 10");
-	ServerCommand("t_karma_kill_confirmed_teammate  10");
-	ServerCommand("t_karma_kill_unconfirmed_teammate  10");
-	
 	for (int client = 1; client <= MaxClients; client++)
 	{
 		if (!IsClientInGame(client))
@@ -1942,5 +2056,95 @@ void CheckForUnnaturalWin()
 	else if(!annihilation && soloAlive == 0 && atraitorsAlive == 0)
 	{
 		ForceEndRound(TE_TeamWin, 1);
+	}
+}
+
+//client index to recieve message, localization token
+public void CreateSayText(int client, const char[] token)
+{
+	Handle umsg = StartMessageOne("SayText", client);
+	BfWrite bfw = UserMessageToBfWrite(umsg);
+	bfw.WriteByte(client);
+	bfw.WriteString(token);
+	EndMessage();
+}
+public void CreateSayTextDataPack(DataPack pack)
+{
+    pack.Reset();
+
+    int client = pack.ReadCell();
+
+    char token[128];
+    pack.ReadString(token, sizeof(token));
+
+    delete pack;
+
+    CreateSayText(client, token);
+}
+public void CreateSayTextDeferred(int client, const char[] token)
+{
+	DataPack pack = new DataPack();
+    pack.WriteCell(client);
+    pack.WriteString(token);
+
+    RequestFrame(CreateSayTextDataPack, pack);
+}
+
+// utility functions for kill counts
+
+public void InitKillArrays()
+{
+	for(int i = 0; i<=MaxClients; i++)
+	{
+		g_CorrectKills[i] = 0;
+		g_IncorrectKills[i] = 0;
+	}
+}
+
+public void IncrementKillCount(int killer, int victim)
+{
+	if(IsClientInGame(killer) && IsClientInGame(victim))
+	{
+		any kRole = GetClientRoleUnfiltered(killer);
+		any vRole = GetClientRoleUnfiltered(victim);
+		
+		//convert confirmed innocent roles to innocent since they are the same team
+		if(kRole == TR_Detective || kRole == TR_Doctor) {kRole = TR_Innocent;}
+		if(vRole == TR_Detective || vRole == TR_Doctor) {vRole = TR_Innocent;}
+		
+		//cross-team kills not including solos
+		if(kRole == vRole && kRole != TR_Solo)
+		{
+			g_IncorrectKills[killer]++;
+		}
+		//all solo kills are correct
+		else if(kRole == TR_Solo || vRole == TR_Solo)
+		{
+			g_CorrectKills[killer]++;
+		}
+		//annihilation is always correct
+		else if(kRole == TR_Annihilator)
+		{
+			g_CorrectKills[killer]++;
+		}
+		
+		OverrideClientKillCounts(killer);
+	}
+}
+
+public void OverrideClientKillCounts(int client)
+{
+	SetEntData(client, g_CorrectKillsOffset, g_CorrectKills[client], 1, true);
+	SetEntData(client, g_IncorrectKillsOffset, g_IncorrectKills[client], 1, true);
+}
+
+public void OverrideAllKillCounts()
+{
+	for(int i = 1; i <= MaxClients; i++)
+	{
+		if(IsClientInGame(i))
+		{
+			OverrideClientKillCounts(i);
+		}
 	}
 }
