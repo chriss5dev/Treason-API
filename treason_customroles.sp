@@ -110,9 +110,6 @@ public void TCR_OnPluginStart()
 	//killcount stuff
 	InitKillArrays();
 	
-	//REMOVE THIS LATER Debug
-	SDKHook(1, SDKHook_OnTakeDamage, OnTakeDamage);
-	SDKHook(2, SDKHook_OnTakeDamage, OnTakeDamage);
 }
 
 public void TCR_OnMapStart()
