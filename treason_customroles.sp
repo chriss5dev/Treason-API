@@ -5,6 +5,7 @@
 #include <dhooks>
 #include <treason>
 #include <chriss5math>
+#include <sendproxy>
 #define MAXCUSTOMROLES 16
 //#define REQUIRED_TAPI_VERSION 010500
 #define PROTOTYPE_VERSION_LATEST 2
@@ -20,6 +21,9 @@
 	version = "1.3",
 	url = "https://github.com/chriss5dev/Treason-API"
 };*/
+
+//sendproxy
+bool g_bSendProxyAvailable = false;
 
 //offsets
 int g_CorrectKillsOffset = -1;
@@ -67,6 +71,7 @@ bool g_lastInnocentTriggeredThisRound = false;
 
 public void TCR_OnAllPluginsLoaded()
 {
+	
 	return;
 	// no longer possible due to TCR being included in TAPI.
 	/*if (TAPI_Version() < REQUIRED_TAPI_VERSION)
@@ -81,6 +86,20 @@ public void TCR_OnAllPluginsLoaded()
 // initialize and setup
 public void TCR_OnPluginStart()
 {
+	//confirm sendproxy is running on the server
+	// Skip checking name strings. Check if the extension's functional native is compiled and bound!
+    if (CanTestFeatures() && GetFeatureStatus(FeatureType_Native, "SendProxy_Hook") == FeatureStatus_Available)
+    {
+        g_bSendProxyAvailable = true;
+        PrintToServer("[TCR] SendProxy extension detected via direct native tracking!");
+    }
+    else
+    {
+        g_bSendProxyAvailable = false;
+        SetFailState("[TCR] ERROR! SendProxy extension functions are missing from the server.");
+        return;
+    }
+	
 	TCR_SDKSetup();
 	TCR_CreateForwards();
 	HookUserMessage(GetUserMessageId("SayText"), SayText, true);
@@ -118,6 +137,13 @@ public Action TCR_OnClientPreAdminCheck(int client)
 	{
 		QueryClientConVar(client, "cl_downloadfilter", OnDownloadFilterChecked);
 	}
+	
+	if (g_bSendProxyAvailable)
+    {
+		PrintToServer("(TCR_OnClientPreAdminCheck -> g_bSendProxyAvailable==true)");
+        // hook modelindex of clients
+        SendProxy_Hook(client, "m_nModelIndex", Prop_Int, Proxy_OnModelIndex);
+    }
 	
 	return Plugin_Continue;
 }
@@ -263,6 +289,7 @@ public void TCR_CreateNatives()
 	CreateNative("ClearCustomRole", N_ClearCustomRole);
 	CreateNative("GetCustomRoleIndex", N_GetCustomRoleIndex);
 	CreateNative("GetCustomRoleID", N_GetCustomRoleID);
+	CreateNative("GetCustomRoleIsConfirmed", N_GetCustomRoleIsConfirmed);
 	CreateNative("IsCustomRoleValid", N_IsCustomRoleValid);
 	CreateNative("SetClientCustomRole", N_SetClientCustomRole);
 	CreateNative("ResetClientCustomRole", N_ResetClientCustomRole);
@@ -351,13 +378,6 @@ public void E_TCR_RoundStartPost(Event event, const char[] name, bool dontBroadc
 		
 		if(g_HudTimer == INVALID_HANDLE)
 		{
-			g_HudTimer = CreateTimer(2.0, Timer_HudCustomRoles, _, TIMER_REPEAT);
-		}
-		else
-		{
-			KillTimer(g_HudTimer, true);
-			g_HudTimer = INVALID_HANDLE;
-			
 			g_HudTimer = CreateTimer(2.0, Timer_HudCustomRoles, _, TIMER_REPEAT);
 		}
 	}
@@ -1042,6 +1062,18 @@ public any N_GetCustomRoleID(Handle plugin, int numParams)
 	{
 		SetNativeString(2, g_CustomRoles[index].id, maxlen, true);
 		return true;
+	}
+
+	return false;
+}
+
+public any N_GetCustomRoleIsConfirmed(Handle plugin, int numParams)
+{
+	int index = GetNativeCell(1);
+
+	if(IsCustomRoleValid(index))
+	{
+		return g_CustomRoles[index].isConfirmed;
 	}
 
 	return false;
@@ -2147,4 +2179,70 @@ public void OverrideAllKillCounts()
 			OverrideClientKillCounts(i);
 		}
 	}
+}
+
+//sendproxy hooks
+public Action Proxy_OnModelIndex(int entity, const char[] propname, int &iValue, int element, int client)
+{
+	
+    // entity = source of model index data
+    // client = reciever
+    // iValue = current server-sided model index
+    
+    // ignore non-client recievers
+    if (client < 1 || client > MaxClients || !IsClientInGame(client))
+    {
+        return Plugin_Continue;
+    }
+	
+	//send each client their own model no matter what
+	if(client == entity)
+	{
+		return Plugin_Continue;
+	}
+	PrintToServer("Proxy_OnModelIndex: entity=%d, client=%d, iValue=%d", entity, client, iValue);
+	
+	int entityCustomRoleIndex = GetClientCustomRoleIndex(entity);
+	any clientState = GetClientState(client);
+    
+    // if entity has custom role...
+    if (entityCustomRoleIndex != 0)
+    {
+		// if custom role is intended to be revealed/confirmed, continue
+		if(GetCustomRoleIsConfirmed(entityCustomRoleIndex))
+		{
+			return Plugin_Continue;
+		}
+		// if viewer client is alive or injured (and custom role isnt confirmed)
+		else if(clientState == TS_Default || clientState == TS_Injured)
+		{
+			// BRANCH: override the model value to hide the true customrole model
+			int modelIndex = -1;
+			int class = GetClientClass(entity);
+			//get the disguise model based on class rather than the actual modelPath
+			switch(class)
+			{
+				case TC_Light:
+				{
+					modelIndex = PrecacheModel("models/player/mafia_light.mdl");
+					iValue = modelIndex;
+				}
+				case TC_Med:
+				{
+					modelIndex = PrecacheModel("models/player/mafia_medium.mdl");
+					iValue = modelIndex;
+				}
+				case TC_Heavy:
+				{
+					modelIndex = PrecacheModel("models/player/mafia_heavy.mdl");
+					iValue = modelIndex;
+				}
+				default: {PrintToServer("[TCR] ERROR! Proxy_OnModelIndex \"override model\" logic branch resulted in default inside of switch(class)."); return Plugin_Continue;}
+			}
+            
+            // force the client to recieve the new version of iValue (model index)
+            return Plugin_Changed; 
+		}
+    }
+    return Plugin_Continue;
 }
