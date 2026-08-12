@@ -275,8 +275,8 @@ native any SetClientRoleID(int client, int role);
 
 /* 
 Returns client index's Treason role as "treasonRole" or "int".
-Returns 0 (TRole_Unassigned / TR_None) if unassigned or spectator.
-Detecting a Ghost (6) depends on the Ghost Radar ability existing on the target client index.
+Returns 0 (TRole_Unassigned / TR_None) if unassigned, spectator, or dead.
+Dead players are "filtered out" and return 0 (TRole_Unassigned / TR_None).
 
 @param client				The target client index.
 @return					The Treason role of the provided client, formatted as described above.
@@ -294,6 +294,17 @@ May return true even if the SDKCall fails. (uncommon)
 @return					Returns false boolean on detected failure.
 */
 native any SetClientRole(int client, int role);
+
+/* 
+Returns client index's Treason role as "treasonRole" or "int", without any PlayerState checks.
+Returns 0 (TRole_Unassigned / TR_None) only if unassigned.
+Death does not affect the return value. A dead traitor/solo still returns TR_Traitor/TR_Solo using this function.
+Does not return TR_Ghost.
+
+@param client				The target client index.
+@return					The Treason role of the provided client, formatted as described above.
+*/
+native any GetClientRoleUnfiltered(int client);
 
 /* 
 Returns the client index of the Detective client.

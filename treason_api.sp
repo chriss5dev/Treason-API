@@ -226,6 +226,7 @@ public void CreateNatives()
 	CreateNative("SetClientRoleID", N_SetClientRoleID);
 	CreateNative("GetClientRole", N_GetClientRole);
 	CreateNative("SetClientRole", N_SetClientRole);
+	CreateNative("GetClientRoleUnfiltered", N_GetClientRoleUnfiltered);
 	CreateNative("GetClientRoleNameVanilla", N_GetClientRoleNameVanilla);
 	CreateNative("GetClientRoleIDName", N_GetClientRoleIDName);
 	//special innocents
@@ -793,7 +794,7 @@ public any N_SetClientRole(Handle plugin, int numParams)
 {
 	// Get client index (parameter 1)
 	int client = GetNativeCell(1);
-	// Get role index (parameter 2)
+	// Get role (parameter 2)
 	int role = GetNativeCell(2);
 	
 	if(role <= 5 && role >= 0 && IsClientInGame(client))
@@ -804,6 +805,25 @@ public any N_SetClientRole(Handle plugin, int numParams)
 		return true;
 	}
 	return false;
+}
+
+public any N_GetClientRoleUnfiltered(Handle plugin, int numParams)
+{
+	// Get client index (parameter 1)
+	int client = GetNativeCell(1);
+	
+	if(IsClientInGame(client))
+	{
+		if(IsClientSoloCustomRole(client))
+		{return TR_Solo;}
+		else
+		{
+			//otherwise we good to check server memory
+			int role = GetEntData(client, g_RoleOffset, 1);
+			return role;
+		}
+	}
+	return TA_None;
 }
 
 public any N_IsClientRevealed(Handle plugin, int numParams)

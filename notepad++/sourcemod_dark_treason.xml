@@ -2804,7 +2804,9 @@ OnRegisterCustomRoles
 OnClearCustomRoles
 OnClientAssignedCustomRole
 IsClientRevealed
-SetClientRevealed</Keywords>
+SetClientRevealed
+GetClientRoleUnfiltered
+OnTreasonRoundEnd</Keywords>
             <Keywords name="Keywords6">TRole_Unassigned TR_None
  TRole_Innocent  TR_Innocent
  TRole_Traitor  TR_Traitor
@@ -2877,10 +2879,18 @@ Command_
 
 N_
 
-Native_</Keywords>
+Native_
+
+Cmd
+
+Event
+
+Native</Keywords>
             <Keywords name="Keywords8">g_
 
-global_</Keywords>
+global_
+
+TCR_PROTOTYPE_VERSION</Keywords>
             <Keywords name="Delimiters">00" 01\ 02" 03' 04\ 05' 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23</Keywords>
         </KeywordLists>
         <Styles>
