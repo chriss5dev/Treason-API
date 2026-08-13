@@ -286,6 +286,7 @@ public void TCR_CreateNatives()
 	CreateNative("GetCustomRoleIndex", N_GetCustomRoleIndex);
 	CreateNative("GetCustomRoleID", N_GetCustomRoleID);
 	CreateNative("GetCustomRoleIsConfirmed", N_GetCustomRoleIsConfirmed);
+	CreateNative("SetCustomRoleIsConfirmed", N_SetCustomRoleIsConfirmed);
 	CreateNative("IsCustomRoleValid", N_IsCustomRoleValid);
 	CreateNative("SetClientCustomRole", N_SetClientCustomRole);
 	CreateNative("ResetClientCustomRole", N_ResetClientCustomRole);
@@ -1091,6 +1092,20 @@ public any N_GetCustomRoleIsConfirmed(Handle plugin, int numParams)
 	if(IsCustomRoleValid(index))
 	{
 		return g_CustomRoles[index].isConfirmed;
+	}
+
+	return false;
+}
+
+public any N_SetCustomRoleIsConfirmed(Handle plugin, int numParams)
+{
+	int index = GetNativeCell(1);
+	bool state = GetNativeCell(2);
+
+	if(IsCustomRoleValid(index))
+	{
+		g_CustomRoles[index].isConfirmed = state;
+		return true;
 	}
 
 	return false;

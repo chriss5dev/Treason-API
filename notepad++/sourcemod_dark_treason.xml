@@ -2807,7 +2807,8 @@ IsClientRevealed
 SetClientRevealed
 GetClientRoleUnfiltered
 OnTreasonRoundEnd
-GetCustomRoleIsConfirmed</Keywords>
+GetCustomRoleIsConfirmed
+SetCustomRoleIsConfirmed</Keywords>
             <Keywords name="Keywords6">TRole_Unassigned TR_None
  TRole_Innocent  TR_Innocent
  TRole_Traitor  TR_Traitor

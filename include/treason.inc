@@ -475,6 +475,14 @@ Additionally returns false on failure.
 native bool GetCustomRoleIsConfirmed(int customRoleIndex);
 
 /* 
+Sets the CustomRole.isConfirmed (bool) of the given custom role index.
+
+@param customRoleIndex		The target custom role index.
+@return					Returns true if successful.
+*/
+native bool SetCustomRoleIsConfirmed(int customRoleIndex, bool state);
+
+/* 
 Gets client index's role name as an char[] and copies the result to a pre-existing array.
 Includes all non-conventional role names such as "Ghost" and custom roles, if also desired.
 Does not work without treason_customroles (TCR) installed.
