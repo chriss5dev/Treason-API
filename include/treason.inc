@@ -556,7 +556,7 @@ native int GetClientCustomRoleIndex(int client);
 
 /* 
 Attempts to force the round to end given custom conditions.
-Resolves the custom conditions into more complex sets of event keys.
+Resolves the custom conditions into more complex sets of event keys, then uses a deferred SDKCall to end the round.
 *Note the existence of ConVar "tapi_deathmatchmusic".
 
 @param endCondition		The desired endCondition, as a treasonEndCondition or an int.

@@ -7,20 +7,7 @@
 #include <chriss5math>
 #include <sendproxy>
 #define MAXCUSTOMROLES 16
-//#define REQUIRED_TAPI_VERSION 010500
 #define PROTOTYPE_VERSION_LATEST 2
-
-//TCR VERSION
-// 1.3
-
-/*public Plugin myinfo =
-{
-	name = "Treason Custom Roles",
-	author = "chriss5",
-	description = "Creates the illusion of custom roles existing in Klaus Veen's Treason. Bundled with the Treason API.",
-	version = "1.3",
-	url = "https://github.com/chriss5dev/Treason-API"
-};*/
 
 //sendproxy
 bool g_bSendProxyAvailable = false;
@@ -51,6 +38,7 @@ ConVar g_cvMaxCustomRolesSolo;
 ConVar g_cvAction1Key;
 ConVar g_cvEnableDeathmatchMusic;
 ConVar g_cvDataForceWinActive;
+ConVar g_cvIgnoreWinConditions;
 
 public CustomRole g_CustomRoles[MAXCUSTOMROLES];
 public int g_ClientRoles[MAXPLAYERS+1];
@@ -59,9 +47,11 @@ public bool g_TempDisabledClients[MAXPLAYERS+1];
 public bool g_RecentlySelectedSoloClients[MAXPLAYERS+1];
 int g_CurrentlyDyingClient = -1;
 int g_CurrentlyKillingClient = -1;
+bool g_bDisableEndRoundDetour = false;
 Handle g_HudTimer = INVALID_HANDLE;
 
 Handle g_hEndRound = INVALID_HANDLE;
+Handle g_hEndRoundCall = INVALID_HANDLE;
 
 int endConditionOverride = -1;
 int potrOverride = -1;
@@ -109,7 +99,6 @@ public void TCR_OnPluginStart()
 	
 	//killcount stuff
 	InitKillArrays();
-	
 }
 
 public void TCR_OnMapStart()
@@ -137,6 +126,7 @@ public Action TCR_OnClientPreAdminCheck(int client)
 	
 	if (g_bSendProxyAvailable)
     {
+		PrintToServer("(TCR_OnClientPreAdminCheck -> g_bSendProxyAvailable==true)");
         // hook modelindex of clients
         SendProxy_Hook(client, "m_nModelIndex", Prop_Int, Proxy_OnModelIndex);
     }
@@ -223,6 +213,15 @@ public void TCR_SDKSetup()
 		SetFailState("Failed to enable EndRound pre-detour");
 	}
 	
+	StartPrepSDKCall(SDKCall_GameRules);
+    if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "EndRound"))
+    {
+        delete hGameConf;
+        SetFailState("Failed to set SDKCall from 'EndRound' signature");
+    }
+    PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
+    g_hEndRoundCall = EndPrepSDKCall();
+	
 	g_CorrectKillsOffset = GameConfGetOffset(hGameConf, "PlayerCorrectKills");
     if (g_CorrectKillsOffset == -1)
     {
@@ -245,7 +244,7 @@ public void TCR_SDKSetup()
     }
 	
 	delete hGameConf;
-	if (g_hEndRound == null)
+	if (g_hEndRoundCall == INVALID_HANDLE)
 	{
 		SetFailState("Failed to run TCR_SDKSetup!");
 	}
@@ -264,8 +263,9 @@ public void TCR_CreateForwards()
 
 public void TCR_CreateConVars()
 {
-	g_cvDebug = CreateConVar("tapi_cr_debug", "1", "Displays debugging messages in the server console when set to 1. Primarily intended for custom role development.");
+	g_cvDebug = CreateConVar("tapi_cr_debug", "1", "Displays extra debugging messages in the server console when set to 1. Primarily intended for custom role development.");
 	g_cvEnableDeathmatchMusic = FindConVar("tapi_deathmatchmusic");
+	g_cvIgnoreWinConditions = FindConVar("mp_ignore_round_win_conditions");
 	
 	g_cvDataForceWinActive = CreateConVar("tapi_data_forcewinactive", "0", "Provides the sate of forceWinActive to other plugins.", FCVAR_SPONLY);
 
@@ -320,6 +320,8 @@ public void TCR_RegisterCommands()
 	RegAdminCmd("sm_setcr", CmdSetCustomRole, ADMFLAG_ROOT);
 	RegAdminCmd("tapi_listcr", CmdListCustomRoles, ADMFLAG_ROOT);
 	RegAdminCmd("sm_listcr", CmdListCustomRoles, ADMFLAG_ROOT);
+	RegAdminCmd("tapi_endround", CmdEndRound, ADMFLAG_ROOT);
+	RegAdminCmd("sm_endround", CmdEndRound, ADMFLAG_ROOT);
 	
 	RegAdminCmd("tcr_get", CmdGetCustomRole, ADMFLAG_ROOT);
 	RegAdminCmd("tcr_set", CmdSetCustomRole, ADMFLAG_ROOT);
@@ -352,6 +354,7 @@ public void E_TCR_RoundStartPre(Event event, const char[] name, bool dontBroadca
 	bool isCarnage = event.GetBool("iscarnage");
 	if(!isCarnage)
 	{
+		g_bDisableEndRoundDetour = false;
 		for(int i = 1;i <= MaxClients; i++)
 		{
 			if(!IsClientInGame(i)) {continue;}
@@ -525,6 +528,9 @@ public void E_TCR_PlayerChangeClass(Event event, const char[] name, bool dontBro
 public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playersNum, bool reliable, bool init)
 {
 	int client = BfReadByte(msg);
+	PrintToServer("[SayText] client:%d;", client);
+	PrintToServer("[SayText] dying:%d;", g_CurrentlyDyingClient);
+	PrintToServer("[SayText] killing:%d;", g_CurrentlyKillingClient);
 	
 	if(g_CurrentlyDyingClient == g_CurrentlyKillingClient || client <= 0)
 	{return Plugin_Continue;}
@@ -535,6 +541,7 @@ public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playe
 		BfReadString(msg, buffer, sizeof(buffer));
 		any role = GetClientRoleUnfiltered(client);
 		any killingRole = GetClientRoleUnfiltered(g_CurrentlyKillingClient);
+		PrintToServer("[SayText] client:%d, token:%s;", client, buffer);
 		
 		if(role == TR_Detective){role = TR_Innocent;}
 		if(killingRole == TR_Detective){killingRole = TR_Innocent;}
@@ -568,6 +575,7 @@ public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playe
 		BfReadString(msg, buffer, sizeof(buffer));
 		any role = GetClientRoleUnfiltered(client);
 		//any dyingRole = GetClientRoleUnfiltered(g_CurrentlyDyingClient);
+		PrintToServer("[SayText] client:%d, token:%s, role:%d;", client, buffer, role);
 		
 		if(role == TR_Detective){role = TR_Innocent;}
 		//if(dyingRole == TR_Detective){dyingRole = TR_Innocent;}
@@ -623,6 +631,24 @@ public Action CmdListCustomRoles(int client, int args)
 			PrintToConsole(client, "Index: %d", i);
 			PrintToConsole(client, "ID: %s", id);
 		}
+	}
+	return Plugin_Handled;
+}
+
+public Action CmdEndRound(int client, int args)
+{
+	if(args == 2)
+	{
+			int winner = GetCmdArgInt(1);
+			int endCondition = GetCmdArgInt(2);
+			SDKCall(g_hEndRoundCall, winner, endCondition, true, false, false, false);
+			PrintToConsole(client, "EndRound: (winner:%d, reason:%d, ...)", winner, endCondition);
+			PrintToConsole(client, "SDKCall: CTreasonGameRules::SetWinningTeam(%d, %d, true, false, false, false)", winner, endCondition);
+	}
+	else
+	{
+		PrintToConsole(client, "usage: tapi_endround <winner> <endCondition>");
+		PrintToConsole(client, "note: refer to treason.inc for a list of all valid values.");
 	}
 	return Plugin_Handled;
 }
@@ -1108,7 +1134,7 @@ public int N_GetClientCustomRoleIndex(Handle plugin, int numParams)
 	return g_ClientRoles[client];
 }
 
-
+//g_hEndRoundCall
 public any N_ForceEndRound(Handle plugin, int numParams)
 {
 	if(numParams < 2) {return false;}
@@ -1116,12 +1142,13 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 	int winner = GetNativeCell(2);
 	if(endCondition > 0 && endCondition <= 4)
 	{
+		g_bDisableEndRoundDetour = true;
 		switch(endCondition)
 		{
 			case TE_TeamWin:
 			{
 				if(winner != 1 && winner != 2) {PrintToServer("[TCR] Error - ForceEndRound provided winning team \"%d\" is invalid.", winner); return false;}
-				ForceWin(winner);
+				SDKCall(g_hEndRoundCall, winner, endCondition, true, false, false, false);
 			}
 			case TE_Deathmatch:
 			{
@@ -1135,8 +1162,8 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 					potrOverride = winner;
 					//set winnerOverride to invalid team 4
 					winnerOverride = 4;
-					//mp_forcewin 0 (no team)
-					ForceWin(0);
+					//CTreasonGameRules::SetWinningTeam
+					SDKCall(g_hEndRoundCall, winnerOverride, endConditionOverride, true, false, false, false);
 					//send annihilation message
 					PrintToChatAll("\x07FF7700%N\x07FFFFFF has survived the carnage round!", winner);
 				}
@@ -1148,8 +1175,8 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 					endConditionOverride = 2;
 					//set winnerOverride to provided winner
 					winnerOverride = winner;
-					//mp_forcewin 0 (no team)
-					ForceWin(0);
+					//CTreasonGameRules::SetWinningTeam
+					SDKCall(g_hEndRoundCall, winnerOverride, endConditionOverride, true, false, false, false);
 				}
 			}
 			case TE_Time:
@@ -1158,8 +1185,8 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 				if(winner < 0 || winner > 2) {PrintToServer("[TCR] Error - ForceEndRound provided winning-by-time team \"%d\" is invalid.", winner); return false;}
 				//set endCondition to Time
 				endConditionOverride = 3;
-				//mp_forcewin (winner)
-				ForceWin(winner);
+				//CTreasonGameRules::SetWinningTeam
+				SDKCall(g_hEndRoundCall, winner, endConditionOverride, true, false, false, false);
 			}
 			case TE_Solo:
 			{
@@ -1168,21 +1195,19 @@ public any N_ForceEndRound(Handle plugin, int numParams)
 				endConditionOverride = 0;
 				//potr is winner client
 				potrOverride = winner;
-				//mp_forcewin 0 (no team)
-				ForceWin(0);
+				//CTreasonGameRules::SetWinningTeam
+				SDKCall(g_hEndRoundCall, 0, endConditionOverride, true, false, false, false);
 				//customrole plugins are responsible for creating their own win text and notifications
 			}
 		}
-	}
-	else
-	{PrintToServer("[TCR] Error - ForceEndRound provided endCondition \"%d\" is invalid.", endCondition); return false;}
-	if(forceWinActive)
-	{
-		g_cvDataForceWinActive.SetInt(1);
-		if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceEndRound called with endCondition \"%d\" and winner \"%d\".", endCondition, winner);}
+		if(forceWinActive)
+		{
+			g_cvDataForceWinActive.SetInt(1);
+			if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceEndRound called with endCondition \"%d\" and winner \"%d\".", endCondition, winner);}
+		}
 		return true;
 	}
-	PrintToServer("[TCR] Error - ForceEndRound FAILED with endCondition \"%d\" and winner \"%d\".", endCondition, winner);
+	PrintToServer("[TCR] Error - ForceEndRound provided endCondition \"%d\" is invalid.", endCondition);
 	return false;
 }
 
@@ -1705,35 +1730,6 @@ public int AssignCustomRoleToRandomClientCandidate(int customRoleIndex, int cand
 	return finalClientCandidateIndex;
 }
 
-//team 0 = no team
-//team 1 = innocent
-//team 2 = traitor
-public void ForceWin(int team)
-{
-	//if team is invalid, stop here and report to server console.
-	if(team < 0 || team > 2) {PrintToServer("[TCR] Error - ForceWin Invalid Team Input \"%d\"!", team); return;}
-	
-	//get original flags
-	int originalFlags = GetCommandFlags("mp_forcewin");
-	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceWin originalFlags: %d", originalFlags);}
-	
-	//create modified flags
-	int newFlags = originalFlags & ~FCVAR_CHEAT;
-	if(g_cvDebug.BoolValue){PrintToServer("[TCR] Debug - ForceWin newFlags: %d", newFlags);}
-	
-	//apply modified flags and call mp_forcewin
-	SetCommandFlags("mp_forcewin", newFlags);
-	ServerCommand("mp_forcewin %d", team);
-	
-	//set this bool so we know to hook all overrides
-	forceWinActive = true;
-	g_cvDataForceWinActive.SetInt(1);
-	
-	//restore flags to original
-	SetCommandFlags("mp_forcewin", originalFlags);
-	return;
-}
-
 public void TempDisableRatingPunishments()
 {
 	ServerCommand("t_rating_kill_teammate_innocents 0");
@@ -1923,20 +1919,26 @@ public void SoloWin(int client)
 	Call_PushCell(client);
 	Call_PushCell(customRoleIndex);
 	Call_Finish();
-	ForceEndRound(TE_Solo, client);
+	ForceEndRoundDeferred(TE_Solo, client);
 }
 
 public MRESReturn Detour_EndRound(Address pThis, DHookParam hParams)
 {
+	if(g_cvIgnoreWinConditions.IntValue == 1)
+	{return MRES_Supercede;}
+	if(g_bDisableEndRoundDetour)
+	{return MRES_Ignored;}
+	
 	int winner = DHookGetParam(hParams, 1);
 	int reason = DHookGetParam(hParams, 2);
 	int arg3 = DHookGetParam(hParams, 3);
 	int arg4 = DHookGetParam(hParams, 4);
 	int arg5 = DHookGetParam(hParams, 5);
 	int arg6 = DHookGetParam(hParams, 6);
-
-	PrintToServer("[TCR] EndRound caught: this=%x winner=%d reason=%d, arg3=%d arg4=%d arg5=%d arg6=%d",
-		pThis, winner, reason, arg3, arg4, arg5, arg6);
+	
+	if(g_cvDebug.IntValue == 1)
+	{PrintToServer("[TCR] EndRound caught: this=%x winner=%d reason=%d, forceMapReset=%d switchTeams=%d dontAddScore=%d final=%d",
+		pThis, winner, reason, arg3, arg4, arg5, arg6);}
 	
 	//start endround logic checks
 	int soloLastAlive = IsSurvivorSoloLastAlive();
@@ -2074,11 +2076,11 @@ void CheckForUnnaturalWin()
 	
 	if(!annihilation && soloAlive == 0 && ainnocentsAlive == 0)
 	{
-		ForceEndRound(TE_TeamWin, 2);
+		ForceEndRoundDeferred(TE_TeamWin, 2);
 	}
 	else if(!annihilation && soloAlive == 0 && atraitorsAlive == 0)
 	{
-		ForceEndRound(TE_TeamWin, 1);
+		ForceEndRoundDeferred(TE_TeamWin, 1);
 	}
 }
 
@@ -2235,4 +2237,24 @@ public Action Proxy_OnModelIndex(int entity, const char[] propname, int &iValue,
 		}
     }
     return Plugin_Continue;
+}
+
+//deferred forceendround
+public void ForceEndRoundDataPack(DataPack pack)
+{
+    pack.Reset();
+	int reason = pack.ReadCell();
+    int winner = pack.ReadCell();
+    delete pack;
+
+    ForceEndRound(reason, winner);
+}
+public void ForceEndRoundDeferred(int reason, int winner)
+{
+	g_bDisableEndRoundDetour = true;
+	DataPack pack = new DataPack();
+	pack.WriteCell(reason);
+    pack.WriteCell(winner);
+
+    RequestFrame(ForceEndRoundDataPack, pack);
 }

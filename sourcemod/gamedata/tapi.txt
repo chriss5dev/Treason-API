@@ -122,21 +122,21 @@
                     {
                         "type" "int"
                     }
-                    "arg3"
+                    "forceMapReset"
                     {
-                        "type" "int"
+                        "type" "bool"
                     }
-                    "arg4"
+                    "switchTeams"
                     {
-                        "type" "int"
+                        "type" "bool"
                     }
-                    "arg5"
+                    "dontAddScore"
                     {
-                        "type" "int"
+                        "type" "bool"
                     }
-                    "arg6"
+                    "final"
                     {
-                        "type" "int"
+                        "type" "bool"
                     }
                 }
             }
