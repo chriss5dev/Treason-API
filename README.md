@@ -43,7 +43,7 @@ This project was originally made for my own personal use, but I hope people find
 
 # TCR ConVars
 `tapi_cr_debug`
-- "Displays debugging messages in the server console when set to 1. Primarily intended for custom role development."
+- "Displays extra debugging messages in the server console when set to 1. Primarily intended for custom role development."
 
 `tapi_keybind1`
 - "The key used to forcebind console command 'tapi_action1' for all clients."
