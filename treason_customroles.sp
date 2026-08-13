@@ -529,9 +529,6 @@ public void E_TCR_PlayerChangeClass(Event event, const char[] name, bool dontBro
 public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playersNum, bool reliable, bool init)
 {
 	int client = BfReadByte(msg);
-	PrintToServer("[SayText] client:%d;", client);
-	PrintToServer("[SayText] dying:%d;", g_CurrentlyDyingClient);
-	PrintToServer("[SayText] killing:%d;", g_CurrentlyKillingClient);
 	
 	if(g_CurrentlyDyingClient == g_CurrentlyKillingClient || client <= 0)
 	{return Plugin_Continue;}
@@ -542,7 +539,6 @@ public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playe
 		BfReadString(msg, buffer, sizeof(buffer));
 		any role = GetClientRoleUnfiltered(client);
 		any killingRole = GetClientRoleUnfiltered(g_CurrentlyKillingClient);
-		PrintToServer("[SayText] client:%d, token:%s;", client, buffer);
 		
 		if(role == TR_Detective){role = TR_Innocent;}
 		if(killingRole == TR_Detective){killingRole = TR_Innocent;}
@@ -576,7 +572,6 @@ public Action SayText(UserMsg msg_id, Handle msg, const int[] players, int playe
 		BfReadString(msg, buffer, sizeof(buffer));
 		any role = GetClientRoleUnfiltered(client);
 		//any dyingRole = GetClientRoleUnfiltered(g_CurrentlyDyingClient);
-		PrintToServer("[SayText] client:%d, token:%s, role:%d;", client, buffer, role);
 		
 		if(role == TR_Detective){role = TR_Innocent;}
 		//if(dyingRole == TR_Detective){dyingRole = TR_Innocent;}

@@ -6,8 +6,8 @@
 #include <treason>
 #include "treason_customroles.sp"
 
-#define TAPI_VERSION "1.6"
-#define TAPI_VERSION_INT 010600
+#define TAPI_VERSION "1.6.1"
+#define TAPI_VERSION_INT 010601
  
 public Plugin myinfo =
 {
