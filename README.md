@@ -15,6 +15,7 @@ This project was originally made for my own personal use, but I hope people find
 
 # Documentation
 https://chriss5dev.github.io/TAPI-docs/
+[TAPI-Docs repository](https://github.com/chriss5dev/TAPI-docs)
 
 # Dependencies
 ### [SendProxy (TheByKotik)](https://github.com/TheByKotik/sendproxy)
