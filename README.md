@@ -14,7 +14,7 @@ Hopefully, this API and its companion plugins will make Treason modding more acc
 This project was originally made for my own personal use, but I hope people find use in it!
 
 # Documentation
-https://chriss5dev.github.io/TAPI-docs/
+https://chriss5dev.github.io/TAPI-docs/  
 [TAPI-Docs repository](https://github.com/chriss5dev/TAPI-docs)
 
 # Dependencies
